@@ -1,0 +1,47 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isBootstrapOwner() {
+      return request.auth != null
+        && request.auth.token.email == 'talhakhan14746@gmail.com';
+    }
+
+    function isCurrentOwner() {
+      return request.auth != null
+        && (
+          isBootstrapOwner() && !exists(/databases/$(database)/documents/appConfig/authorization)
+          || (
+            exists(/databases/$(database)/documents/appConfig/authorization)
+            && request.auth.token.email == get(/databases/$(database)/documents/appConfig/authorization).data.ownerEmail
+          )
+        );
+    }
+
+    function authConfig() {
+      return get(/databases/$(database)/documents/appConfig/authorization).data;
+    }
+
+    function appAccessAllowed() {
+      return isCurrentOwner()
+        || authConfig().enabled != true
+        || request.auth.token.email in authConfig().authorizedEmails;
+    }
+
+    match /appConfig/authorization {
+      // Any signed-in user may read the current authorization state so the app
+      // can decide whether that account is allowed. Only the current owner may write.
+      allow read: if request.auth != null;
+      allow create: if isBootstrapOwner();
+      allow update: if isCurrentOwner();
+      allow delete: if false;
+    }
+
+    match /users/{userId}/{document=**} {
+      allow read, write:
+        if request.auth != null
+        && request.auth.uid == userId
+        && appAccessAllowed();
+    }
+  }
+}
