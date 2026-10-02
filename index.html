@@ -2199,16 +2199,16 @@ async function checkUserAuthorization(user){
 window.setAuthorizationEnabled=async function(enabled){
   if(!isOwnerAccount()){return;}
   authorizationConfig.enabled=!!enabled;
+  authorizationConfig.updatedAt=new Date().toISOString();
+  // Update the local cache with a NEW timestamp so an older Firestore value
+  // can never overwrite a freshly changed setting on the next page load.
   localStorage.setItem("izhar_pavers_authorization_config_v1",JSON.stringify(authorizationConfig));
   renderAuthorizationUI();
   try{
     await saveAuthorizationConfig();
     setCloudMessage(enabled?"Authorization is ON. Only approved Gmail accounts can use the app.":"Authorization is OFF. Any Google account can use the app.");
   }catch(e){
-    // Keep the setting locally so a refresh does not unexpectedly switch it OFF.
-    // A later successful cloud connection will save the same configuration.
     setCloudMessage("Authorization saved on this device. Cloud save is pending: "+e.message);
-    alert("Authorization is saved on this device, but could not yet be saved to Firebase. Check Firestore rules/connection and try again.");
   }
 };
 window.addAuthorizedEmail=async function(){

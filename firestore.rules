@@ -2,6 +2,14 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
+    function authDoc() {
+      return /databases/$(database)/documents/appConfig/authorization;
+    }
+
+    function hasAuthConfig() {
+      return exists(authDoc());
+    }
+
     function isBootstrapOwner() {
       return request.auth != null
         && request.auth.token.email == 'talhakhan14746@gmail.com';
@@ -10,29 +18,30 @@ service cloud.firestore {
     function isCurrentOwner() {
       return request.auth != null
         && (
-          isBootstrapOwner() && !exists(/databases/$(database)/documents/appConfig/authorization)
-          || (
-            exists(/databases/$(database)/documents/appConfig/authorization)
-            && request.auth.token.email == get(/databases/$(database)/documents/appConfig/authorization).data.ownerEmail
-          )
+          (!hasAuthConfig() && isBootstrapOwner())
+          || (hasAuthConfig()
+              && request.auth.token.email == get(authDoc()).data.ownerEmail)
         );
     }
 
-    function authConfig() {
-      return get(/databases/$(database)/documents/appConfig/authorization).data;
-    }
-
     function appAccessAllowed() {
-      return isCurrentOwner()
-        || authConfig().enabled != true
-        || request.auth.token.email in authConfig().authorizedEmails;
+      return request.auth != null
+        && (
+          !hasAuthConfig()
+          || isCurrentOwner()
+          || get(authDoc()).data.enabled != true
+          || request.auth.token.email in get(authDoc()).data.authorizedEmails
+        );
     }
 
     match /appConfig/authorization {
-      // Any signed-in user may read the current authorization state so the app
-      // can decide whether that account is allowed. Only the current owner may write.
+      // Signed-in users may read the authorization state so the app can decide access.
       allow read: if request.auth != null;
-      allow create: if isBootstrapOwner();
+
+      // The original bootstrap owner creates the configuration the first time.
+      allow create: if isBootstrapOwner() && !hasAuthConfig();
+
+      // Only the current admin can change authorization or ownership.
       allow update: if isCurrentOwner();
       allow delete: if false;
     }
