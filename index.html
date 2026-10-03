@@ -224,6 +224,96 @@ body:has(.documents-portal.open) .saved-card{display:none}
 .install-banner-dismiss{border:0;background:transparent;color:#94a3b8;font-size:15px;cursor:pointer;padding:4px 6px;border-radius:7px}
 .install-banner-dismiss:hover{background:#1e293b;color:#fff}
 
+
+/* === FINAL TERMS EDITOR LAYOUT OVERRIDE === */
+#termsList .actual-term-editor-row{
+  display:flex !important;
+  flex-direction:column !important;
+  align-items:stretch !important;
+  gap:10px !important;
+  width:100% !important;
+  min-width:0 !important;
+  padding:12px !important;
+  margin:0 0 12px 0 !important;
+  background:#f8fafc !important;
+  border:1px solid #d9e0e8 !important;
+  border-radius:12px !important;
+  box-sizing:border-box !important;
+  position:relative !important;
+}
+#termsList .actual-term-writing-row{
+  display:flex !important;
+  align-items:flex-start !important;
+  gap:10px !important;
+  width:100% !important;
+  min-width:0 !important;
+}
+#termsList .actual-term-number{
+  flex:0 0 32px !important;
+  width:32px !important;
+  height:32px !important;
+  border-radius:9px !important;
+  background:#14213d !important;
+  color:#fff !important;
+  display:flex !important;
+  align-items:center !important;
+  justify-content:center !important;
+  font-weight:800 !important;
+  font-size:14px !important;
+  margin-top:2px !important;
+}
+#termsList .actual-term-textarea{
+  display:block !important;
+  flex:1 1 auto !important;
+  width:100% !important;
+  min-width:0 !important;
+  min-height:100px !important;
+  height:auto !important;
+  padding:12px !important;
+  border:1px solid #cfd7e2 !important;
+  border-radius:9px !important;
+  background:#fff !important;
+  font:inherit !important;
+  line-height:1.5 !important;
+  resize:vertical !important;
+  box-sizing:border-box !important;
+}
+#termsList .actual-term-toolbar{
+  display:flex !important;
+  flex-wrap:wrap !important;
+  align-items:center !important;
+  justify-content:space-between !important;
+  gap:10px !important;
+  width:100% !important;
+  padding-top:9px !important;
+  border-top:1px solid #e5e7eb !important;
+}
+#termsList .actual-term-formatting{
+  display:flex !important;
+  flex-wrap:wrap !important;
+  align-items:center !important;
+  gap:6px !important;
+}
+#termsList .actual-term-order{
+  display:flex !important;
+  align-items:center !important;
+  gap:6px !important;
+  margin-left:auto !important;
+}
+@media(max-width:700px){
+  #termsList .actual-term-editor-row{padding:10px !important}
+  #termsList .actual-term-writing-row{gap:8px !important}
+  #termsList .actual-term-textarea{
+    min-height:120px !important;
+    font-size:16px !important;
+    line-height:1.5 !important;
+  }
+  #termsList .actual-term-toolbar{
+    justify-content:flex-start !important;
+  }
+  #termsList .actual-term-order{margin-left:0 !important}
+}
+
 </style>
 </head>
 <body>
@@ -1032,9 +1122,9 @@ function toggleTermsAuth(locked){
 function addTerm(value="", highlight=false, highlightColor="#fff3a3", bold=false, italic=false, fontSize=null){
   const box=document.getElementById("termsList");
   if(!box) return;
+
   const row=document.createElement("div");
-  row.className="term-row";
-  row.style.cssText="display:flex;flex-direction:column;gap:10px;padding:12px;background:#f8fafc;border:1px solid #d9e0e8;border-radius:12px;margin-bottom:12px;";
+  row.className="term-row actual-term-editor-row";
   row.dataset.highlight=highlight ? "1" : "0";
   row.dataset.highlightColor=highlightColor;
   row.dataset.bold=bold ? "1" : "0";
@@ -1052,19 +1142,18 @@ function addTerm(value="", highlight=false, highlightColor="#fff3a3", bold=false
   const selectedName=(colors.find(x=>x[0]===highlightColor)||[highlightColor,"Color"])[1];
 
   row.innerHTML=`
-    <textarea class="term-input" rows="3" placeholder="Term & Condition likhein..."
-      style="width:100%;min-height:90px;resize:vertical;font:inherit;line-height:1.5;padding:11px 12px;border:1px solid #cfd7e2;border-radius:9px;background:#fff;box-sizing:border-box;"
-    >${esc(value)}</textarea>
+    <div class="actual-term-writing-row">
+      <span class="actual-term-number">${[...document.querySelectorAll("#termsList .actual-term-editor-row")].length + 1}</span>
+      <textarea class="term-input actual-term-textarea" rows="3" placeholder="Term & Condition likhein...">${esc(value)}</textarea>
+    </div>
 
-    <div class="term-controls" style="display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px;padding-top:9px;border-top:1px solid #e5e7eb;">
-      <div class="term-actions" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;min-width:0;">
-        <div class="term-style-controls" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
-          <button type="button" class="btn secondary term-style-btn ${bold?"active":""}" onclick="toggleTermStyle(this,'bold')" title="Bold">B</button>
-          <button type="button" class="btn secondary term-style-btn ${italic?"active":""}" onclick="toggleTermStyle(this,'italic')" title="Italic"><i>I</i></button>
-          <button type="button" class="btn secondary term-style-btn" onclick="changeTermRowFontSize(this,-1)" title="Decrease font size">A−</button>
-          <span class="term-size-label">${Math.min(16,Math.max(7,parseInt(fontSize||getTermsFontSize(),10)||9))} pt</span>
-          <button type="button" class="btn secondary term-style-btn" onclick="changeTermRowFontSize(this,1)" title="Increase font size">A+</button>
-        </div>
+    <div class="actual-term-toolbar">
+      <div class="actual-term-formatting">
+        <button type="button" class="btn secondary term-style-btn ${bold?"active":""}" onclick="toggleTermStyle(this,'bold')" title="Bold">B</button>
+        <button type="button" class="btn secondary term-style-btn ${italic?"active":""}" onclick="toggleTermStyle(this,'italic')" title="Italic"><i>I</i></button>
+        <button type="button" class="btn secondary term-style-btn" onclick="changeTermRowFontSize(this,-1)" title="Decrease font size">A−</button>
+        <span class="term-size-label">${Math.min(16,Math.max(7,parseInt(fontSize||getTermsFontSize(),10)||9))} pt</span>
+        <button type="button" class="btn secondary term-style-btn" onclick="changeTermRowFontSize(this,1)" title="Increase font size">A+</button>
 
         <div class="term-highlight">
           <label style="display:flex;align-items:center;gap:5px;margin:0;font-size:12px;font-weight:700">
@@ -1080,12 +1169,13 @@ function addTerm(value="", highlight=false, highlightColor="#fff3a3", bold=false
         </div>
       </div>
 
-      <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-left:auto;">
-        <button type="button" class="btn secondary term-move" title="Move this term up" aria-label="Move this term up" onclick="moveTerm(this,-1)">↑</button>
-        <button type="button" class="btn secondary term-move" title="Move this term down" aria-label="Move this term down" onclick="moveTerm(this,1)">↓</button>
+      <div class="actual-term-order">
+        <button type="button" class="btn secondary term-move" onclick="moveTerm(this,-1)" title="Move up">↑</button>
+        <button type="button" class="btn secondary term-move" onclick="moveTerm(this,1)" title="Move down">↓</button>
         <button type="button" class="btn danger term-remove" onclick="removeTerm(this)">Remove</button>
       </div>
     </div>`;
+
   box.appendChild(row);
   refreshTermButtons();
 }
