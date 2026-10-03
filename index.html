@@ -1,252 +1,450 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Izhar Pavers</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="manifest" href="manifest.webmanifest">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Izhar Pavers - Quotation & Invoice Management</title>
+  <!-- Tailwind CSS CDN for styling -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- FontAwesome for Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    @media print {
+      .no-print { display: none !important; }
+      .print-only { display: block !important; }
+      body { background: white; padding: 0; margin: 0; }
+      .shadow-md, .shadow-lg { box-shadow: none !important; }
+    }
+  </style>
 </head>
-<body class="bg-gray-100 min-h-screen font-sans">
+<body class="bg-slate-100 font-sans text-slate-800 min-h-screen flex flex-col">
 
-    <!-- Top Navigation Bar -->
-    <nav class="bg-blue-600 text-white p-4 flex justify-between items-center shadow-md relative z-30">
-        <h1 class="text-xl font-bold">Izhar Pavers</h1>
-        
-        <div class="flex items-center gap-2">
-            <!-- Working Sign In Button -->
-            <button id="signInBtn" onclick="openSignInModal()" class="bg-white text-blue-600 hover:bg-gray-100 font-bold px-4 py-2 rounded-lg text-sm transition shadow focus:outline-none cursor-pointer">
-                Sign In
-            </button>
-
-            <!-- Working Menu Button -->
-            <button onclick="toggleMenu()" class="bg-blue-700 hover:bg-blue-800 text-white font-semibold px-4 py-2 rounded-lg text-sm transition focus:outline-none cursor-pointer">
-                ☰ Menu
-            </button>
+  <!-- Header / Navigation Bar -->
+  <header class="bg-slate-900 text-white shadow-lg no-print">
+    <div class="max-w-7xl mx-auto px-4 py-4 flex flex-col sm:flex-row justify-between items-center gap-4">
+      <div class="flex items-center gap-3">
+        <div class="bg-amber-500 text-slate-900 p-2.5 rounded-lg font-bold text-xl">
+          <i class="fa-solid fa-cubes"></i>
         </div>
-    </nav>
-
-    <!-- Main Content Area -->
-    <main class="p-6 text-center text-gray-700">
-        <h2 class="text-2xl font-bold mb-2">Welcome to Izhar Pavers</h2>
-        <p class="text-sm text-gray-600">Sign in karne ke liye top bar me "Sign In" button par click karein.</p>
-    </main>
-
-    <!-- ================= SIGN IN POPUP MODAL ================= -->
-    <div id="signInModal" class="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 hidden">
-        <div class="bg-white rounded-xl shadow-2xl w-full max-w-sm p-6 relative mx-4">
-            <!-- Close Button -->
-            <button onclick="closeSignInModal()" class="absolute top-3 right-3 text-gray-400 hover:text-gray-600 font-bold text-xl p-1 cursor-pointer">
-                ✕
-            </button>
-
-            <h2 class="text-xl font-bold text-gray-800 mb-4 border-b pb-2">Sign In to Account</h2>
-
-            <form onsubmit="handleSignIn(event)" class="space-y-4">
-                <div>
-                    <label class="block text-xs font-bold text-gray-600 mb-1">GMAIL / EMAIL ADDRESS</label>
-                    <input type="email" id="signInEmail" required placeholder="talhakhan14746@gmail.com" class="w-full border border-gray-300 px-3 py-2 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-                </div>
-
-                <div>
-                    <label class="block text-xs font-bold text-gray-600 mb-1">PASSWORD</label>
-                    <input type="password" id="signInPassword" required placeholder="••••••••" class="w-full border border-gray-300 px-3 py-2 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-                </div>
-
-                <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 rounded-lg text-sm transition shadow cursor-pointer">
-                    Sign In
-                </button>
-            </form>
-
-            <div class="mt-4 text-center">
-                <button onclick="closeSignInModal()" class="text-xs text-gray-500 hover:underline cursor-pointer">Cancel</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- ================= SLIDE-OVER SIDE MENU ================= -->
-    <div id="sideMenu" class="fixed inset-y-0 right-0 w-80 bg-white shadow-2xl transform translate-x-full transition-transform duration-300 ease-in-out z-50 overflow-y-auto p-5 hidden">
-        
-        <!-- Menu Header -->
-        <div class="flex justify-between items-center border-b pb-3 mb-4">
-            <h2 class="text-lg font-bold text-gray-800">Admin Menu</h2>
-            <button onclick="toggleMenu()" class="text-gray-500 hover:text-red-600 font-bold text-xl px-2 cursor-pointer">
-                ✕
-            </button>
-        </div>
-
-        <!-- Owner Details -->
-        <div class="p-3 bg-blue-50 border border-blue-200 rounded-lg mb-4 text-sm text-gray-800">
-            <span class="block text-xs font-bold text-blue-600">OWNER ADMIN</span>
-            <span class="font-medium">talhakhan14746@gmail.com</span>
-        </div>
-
-        <!-- Authorization Toggle Switch -->
-        <div class="flex items-center justify-between py-2 border-b mb-4">
-            <div>
-                <span class="text-sm font-semibold text-gray-700 block">Authorization Access</span>
-                <span class="text-xs text-gray-500">Enable/Disable access</span>
-            </div>
-            <label class="relative inline-flex items-center cursor-pointer">
-                <input type="checkbox" id="authorizationToggle" class="sr-only peer">
-                <div class="w-11 h-6 bg-gray-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-green-600"></div>
-            </label>
-        </div>
-
-        <!-- Add Authorized Gmail Input Box -->
-        <div class="mb-4 space-y-1">
-            <label class="block text-xs font-bold text-gray-600">ADD AUTHORIZED GMAIL</label>
-            <div class="flex gap-2">
-                <input type="email" id="authGmailInput" placeholder="Enter Gmail address" 
-                       class="flex-1 border border-gray-300 px-3 py-2 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-                <button onclick="addAuthorizedGmail()" 
-                        class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-lg text-xs font-bold transition cursor-pointer">
-                    Add
-                </button>
-            </div>
-        </div>
-
-        <!-- Authorized Gmails List -->
         <div>
-            <label class="block text-xs font-bold text-gray-600 mb-1">AUTHORIZED GMAILS LIST</label>
-            <div id="authorizedGmailsContainer" class="space-y-2 max-h-60 overflow-y-auto border p-2 rounded-lg bg-gray-50">
-                <!-- Dynamic Items Rendered Here -->
-            </div>
+          <h1 class="text-xl font-bold tracking-wide">IZHAR PAVERS</h1>
+          <p class="text-xs text-slate-400">Quotation & Invoice System</p>
         </div>
+      </div>
+      
+      <!-- Navigation Tabs -->
+      <nav class="flex gap-2 bg-slate-800 p-1.5 rounded-lg border border-slate-700">
+        <button onclick="switchTab('create')" id="tab-create" class="px-4 py-2 text-sm font-medium rounded-md bg-amber-500 text-slate-950 transition">
+          <i class="fa-solid fa-file-invoice mr-1.5"></i> Generator
+        </button>
+        <button onclick="switchTab('saved')" id="tab-saved" class="px-4 py-2 text-sm font-medium rounded-md text-slate-300 hover:text-white hover:bg-slate-700 transition">
+          <i class="fa-solid fa-folder-open mr-1.5"></i> Saved Docs
+        </button>
+        <button onclick="switchTab('settings')" id="tab-settings" class="px-4 py-2 text-sm font-medium rounded-md text-slate-300 hover:text-white hover:bg-slate-700 transition">
+          <i class="fa-solid fa-gear mr-1.5"></i> Settings
+        </button>
+      </nav>
     </div>
+  </header>
 
-    <!-- Backdrop Overlay -->
-    <div id="menuOverlay" onclick="toggleMenu()" class="fixed inset-0 bg-black bg-opacity-40 z-40 hidden"></div>
+  <!-- Main Content Container -->
+  <main class="max-w-7xl mx-auto px-4 py-8 flex-1 w-full">
 
-    <!-- ================= JAVASCRIPT ================= -->
-    <script>
-        const OWNER_ADMIN_EMAIL = "talhakhan14746@gmail.com";
+    <!-- TAB 1: GENERATOR -->
+    <section id="section-create" class="space-y-6">
+      <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+        <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-slate-200 pb-4 mb-6">
+          <div>
+            <h2 class="text-2xl font-bold text-slate-900">Create Quotation / Invoice</h2>
+            <p class="text-sm text-slate-500">Fill in details below to generate document</p>
+          </div>
+          <div class="flex gap-3 no-print">
+            <button onclick="saveCurrentDocument()" class="px-4 py-2 bg-slate-800 text-white text-sm font-medium rounded-lg hover:bg-slate-700 transition flex items-center gap-2">
+              <i class="fa-solid fa-floppy-disk"></i> Save
+            </button>
+            <button onclick="window.print()" class="px-4 py-2 bg-amber-500 text-slate-950 text-sm font-medium rounded-lg hover:bg-amber-400 transition flex items-center gap-2">
+              <i class="fa-solid fa-print"></i> Print / PDF
+            </button>
+          </div>
+        </div>
 
-        // 1. Sign In Modal Functions
-        function openSignInModal() {
-            const modal = document.getElementById("signInModal");
-            if (modal) {
-                modal.classList.remove("hidden");
-            }
-        }
+        <!-- Document Metadata -->
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+          <div>
+            <label class="block text-xs font-semibold text-slate-600 mb-1">Doc Type</label>
+            <select id="docType" class="w-full border border-slate-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-amber-500 outline-none">
+              <option value="Quotation">Quotation</option>
+              <option value="Invoice">Invoice</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-600 mb-1">Doc #</label>
+            <input type="text" id="docNumber" value="IP-2026-001" class="w-full border border-slate-300 rounded-lg p-2 text-sm focus:ring-2 focus:ring-amber-500 outline-none">
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-600 mb-1">Date</label>
+            <input type="date" id="docDate" class="w-full border border-slate-300 rounded-lg p-2 text-sm focus:ring-2 focus:ring-amber-500 outline-none">
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-600 mb-1">Client Name</label>
+            <input type="text" id="clientName" placeholder="Enter client name" class="w-full border border-slate-300 rounded-lg p-2 text-sm focus:ring-2 focus:ring-amber-500 outline-none">
+          </div>
+        </div>
 
-        function closeSignInModal() {
-            const modal = document.getElementById("signInModal");
-            if (modal) {
-                modal.classList.add("hidden");
-            }
-        }
+        <!-- Items Table -->
+        <div class="overflow-x-auto mb-6">
+          <table class="w-full text-left border-collapse" id="itemsTable">
+            <thead>
+              <tr class="bg-slate-100 text-slate-700 text-xs font-semibold uppercase tracking-wider">
+                <th class="p-3 border-b">Material / Description</th>
+                <th class="p-3 border-b w-28">Qty</th>
+                <th class="p-3 border-b w-32">Unit Rate</th>
+                <th class="p-3 border-b w-36">Total (PKR)</th>
+                <th class="p-3 border-b w-16 text-center no-print">Action</th>
+              </tr>
+            </thead>
+            <tbody id="itemsTableBody">
+              <!-- Dynamic Rows inserted here -->
+            </tbody>
+          </table>
+        </div>
 
-        function handleSignIn(event) {
-            event.preventDefault();
-            const email = document.getElementById("signInEmail").value.trim();
-            alert("Success! Signed in as: " + email);
-            closeSignInModal();
-        }
+        <div class="flex justify-between items-center mb-8 no-print">
+          <button onclick="addTableRow()" class="px-4 py-2 bg-emerald-600 text-white text-sm font-medium rounded-lg hover:bg-emerald-500 transition flex items-center gap-2">
+            <i class="fa-solid fa-plus"></i> Add Item
+          </button>
+        </div>
 
-        // 2. Menu Toggle Function
-        function toggleMenu() {
-            const menu = document.getElementById("sideMenu");
-            const overlay = document.getElementById("menuOverlay");
+        <!-- Totals Summary -->
+        <div class="flex justify-end border-t border-slate-200 pt-4">
+          <div class="w-full md:w-72 space-y-3">
+            <div class="flex justify-between text-sm">
+              <span class="text-slate-600">Subtotal:</span>
+              <span id="subTotalDisplay" class="font-semibold text-slate-900">PKR 0</span>
+            </div>
+            <div class="flex justify-between items-center text-sm">
+              <span class="text-slate-600">Discount (PKR):</span>
+              <input type="number" id="discountInput" value="0" min="0" oninput="calculateTotals()" class="w-24 text-right border border-slate-300 rounded p-1 text-sm outline-none">
+            </div>
+            <div class="flex justify-between text-base font-bold text-slate-900 border-t border-slate-300 pt-2">
+              <span>Grand Total:</span>
+              <span id="grandTotalDisplay" class="text-amber-600">PKR 0</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
 
-            if (!menu) return;
+    <!-- TAB 2: SAVED DOCUMENTS -->
+    <section id="section-saved" class="hidden space-y-6">
+      <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+        <h2 class="text-2xl font-bold text-slate-900 mb-4">Saved Documents</h2>
+        <div class="overflow-x-auto">
+          <table class="w-full text-left border-collapse">
+            <thead>
+              <tr class="bg-slate-100 text-slate-700 text-xs font-semibold uppercase tracking-wider">
+                <th class="p-3 border-b">Doc #</th>
+                <th class="p-3 border-b">Type</th>
+                <th class="p-3 border-b">Client Name</th>
+                <th class="p-3 border-b">Date</th>
+                <th class="p-3 border-b">Total Amount</th>
+                <th class="p-3 border-b text-center">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="savedDocsTableBody">
+              <!-- Saved Docs Rendered Here -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
 
-            if (menu.classList.contains("hidden")) {
-                menu.classList.remove("hidden");
-                setTimeout(() => menu.classList.remove("translate-x-full"), 10);
-                if (overlay) overlay.classList.remove("hidden");
-            } else {
-                menu.classList.add("translate-x-full");
-                if (overlay) overlay.classList.add("hidden");
-                setTimeout(() => menu.classList.add("hidden"), 300);
-            }
-        }
+    <!-- TAB 3: SETTINGS -->
+    <section id="section-settings" class="hidden space-y-6">
+      
+      <!-- AUTHORIZED GMAIL SECTION -->
+      <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+        <div class="border-b border-slate-200 pb-3 mb-4">
+          <h3 class="text-lg font-bold text-slate-900 flex items-center gap-2">
+            <i class="fa-solid fa-user-shield text-amber-500"></i> Authorized Gmail / Emails
+          </h3>
+          <p class="text-xs text-slate-500">Add or manage authorized email addresses that have system access</p>
+        </div>
 
-        // 3. Authorization Data Storage Functions
-        function getStoredAuthorizedGmails() {
-            try {
-                const saved = localStorage.getItem("authorized_gmails_list");
-                return saved ? JSON.parse(saved) : [OWNER_ADMIN_EMAIL];
-            } catch (e) {
-                return [OWNER_ADMIN_EMAIL];
-            }
-        }
+        <!-- Input and Add Button -->
+        <div class="flex gap-3 mb-6">
+          <input type="email" id="authEmailInput" placeholder="example@gmail.com" class="flex-1 border border-slate-300 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-amber-500">
+          <button type="button" onclick="addAuthorizedEmail()" class="bg-emerald-600 hover:bg-emerald-500 text-white font-medium text-sm px-5 py-2 rounded-lg transition flex items-center gap-2">
+            <i class="fa-solid fa-plus"></i> Add Gmail
+          </button>
+        </div>
 
-        function saveAuthorizedGmails(list) {
-            localStorage.setItem("authorized_gmails_list", JSON.stringify(list));
-        }
+        <!-- List Container -->
+        <div id="authorizedEmailsList" class="space-y-2">
+          <!-- Dynamically populated via JS -->
+        </div>
+      </div>
 
-        function renderAuthorizedGmailsList() {
-            const container = document.getElementById("authorizedGmailsContainer");
-            if (!container) return;
+      <!-- COMPANY PROFILE SETTINGS -->
+      <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+        <h3 class="text-lg font-bold text-slate-900 mb-4 flex items-center gap-2">
+          <i class="fa-solid fa-building text-slate-700"></i> Company Profile
+        </h3>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label class="block text-xs font-semibold text-slate-600 mb-1">Company Name</label>
+            <input type="text" id="companyName" value="Izhar Pavers Multan" class="w-full border border-slate-300 rounded-lg p-2 text-sm outline-none">
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-600 mb-1">Contact Phone</label>
+            <input type="text" id="companyPhone" value="03080620710" class="w-full border border-slate-300 rounded-lg p-2 text-sm outline-none">
+          </div>
+        </div>
+      </div>
 
-            const gmails = getStoredAuthorizedGmails();
-            container.innerHTML = ""; 
+    </section>
 
-            gmails.forEach((email) => {
-                const isOwner = email.toLowerCase() === OWNER_ADMIN_EMAIL.toLowerCase();
-                const item = document.createElement("div");
-                item.className = "flex items-center justify-between bg-white p-2 rounded-md border border-gray-200 text-xs shadow-sm";
+  </main>
 
-                item.innerHTML = `
-                    <span class="font-medium text-gray-700 truncate max-w-[150px]">${email}</span>
-                    ${isOwner 
-                        ? '<span class="text-[10px] bg-blue-100 text-blue-700 font-bold px-2 py-0.5 rounded">Owner</span>'
-                        : `<button onclick="deleteAuthorizedGmail('${email}')" 
-                                   class="bg-red-500 hover:bg-red-600 text-white text-[10px] font-bold px-2 py-1 rounded transition cursor-pointer">
-                                Delete
-                           </button>`
-                    }
-                `;
-                container.appendChild(item);
-            });
-        }
+  <!-- Footer -->
+  <footer class="bg-slate-900 text-slate-400 text-xs py-4 text-center no-print">
+    &copy; 2026 Izhar Pavers. All Rights Reserved. Designed for fast quotation management.
+  </footer>
 
-        function addAuthorizedGmail() {
-            const input = document.getElementById("authGmailInput");
-            if (!input) return;
+  <!-- Javascript Logic -->
+  <script>
+    // --- APP STATE ---
+    let savedDocs = JSON.parse(localStorage.getItem('izhar_saved_docs')) || [];
+    let authorizedEmails = JSON.parse(localStorage.getItem('authorizedEmails')) || [];
 
-            const email = input.value.trim().toLowerCase();
-            if (!email || !email.includes("@")) {
-                alert("Sahi Gmail address enter karein.");
-                return;
-            }
+    // Initialization
+    document.addEventListener('DOMContentLoaded', () => {
+      document.getElementById('docDate').valueAsDate = new Date();
+      addTableRow(); // Initial empty row
+      renderSavedDocs();
+      renderAuthorizedEmails();
+    });
 
-            let gmails = getStoredAuthorizedGmails();
-            if (gmails.includes(email)) {
-                alert("Yeh Gmail pehle se list me maujood hai.");
-                return;
-            }
+    // --- TAB SWITCHING ---
+    function switchTab(tabName) {
+      const tabs = ['create', 'saved', 'settings'];
+      tabs.forEach(t => {
+        document.getElementById(`section-${t}`).classList.add('hidden');
+        const btn = document.getElementById(`tab-${t}`);
+        btn.classList.remove('bg-amber-500', 'text-slate-950');
+        btn.classList.add('text-slate-300');
+      });
 
-            gmails.push(email);
-            saveAuthorizedGmails(gmails);
-            input.value = "";
-            renderAuthorizedGmailsList();
-        }
+      document.getElementById(`section-${tabName}`).classList.remove('hidden');
+      const activeBtn = document.getElementById(`tab-${tabName}`);
+      activeBtn.classList.add('bg-amber-500', 'text-slate-950');
+      activeBtn.classList.remove('text-slate-300');
+    }
 
-        function deleteAuthorizedGmail(emailToDelete) {
-            if (emailToDelete.toLowerCase() === OWNER_ADMIN_EMAIL.toLowerCase()) {
-                alert("Owner email delete nahi ho sakti.");
-                return;
-            }
+    // --- GENERATOR LOGIC ---
+    function addTableRow(description = '', qty = 1, rate = 0) {
+      const tbody = document.getElementById('itemsTableBody');
+      const row = document.createElement('tr');
+      row.className = 'border-b border-slate-100 hover:bg-slate-50 transition';
 
-            let gmails = getStoredAuthorizedGmails();
-            gmails = gmails.filter(e => e.toLowerCase() !== emailToDelete.toLowerCase());
-            saveAuthorizedGmails(gmails);
-            renderAuthorizedGmailsList();
-        }
+      row.innerHTML = `
+        <td class="p-2">
+          <input type="text" value="${description}" placeholder="Item name / specification" class="item-desc w-full border border-slate-200 rounded p-1.5 text-sm outline-none">
+        </td>
+        <td class="p-2">
+          <input type="number" value="${qty}" min="1" oninput="calculateTotals()" class="item-qty w-full border border-slate-200 rounded p-1.5 text-sm outline-none">
+        </td>
+        <td class="p-2">
+          <input type="number" value="${rate}" min="0" oninput="calculateTotals()" class="item-rate w-full border border-slate-200 rounded p-1.5 text-sm outline-none">
+        </td>
+        <td class="p-2 font-medium text-slate-800 text-sm align-middle item-total">
+          PKR 0
+        </td>
+        <td class="p-2 text-center no-print">
+          <button onclick="removeTableRow(this)" class="text-red-500 hover:text-red-700 p-1.5 rounded transition">
+            <i class="fa-solid fa-trash"></i>
+          </button>
+        </td>
+      `;
+      tbody.appendChild(row);
+      calculateTotals();
+    }
 
-        // 4. Page Load Initializer
-        document.addEventListener("DOMContentLoaded", () => {
-            const authToggle = document.getElementById("authorizationToggle");
-            if (authToggle) {
-                authToggle.checked = localStorage.getItem("authorization_toggle_status") === "true";
-                authToggle.addEventListener("change", (e) => {
-                    localStorage.setItem("authorization_toggle_status", e.target.checked);
-                });
-            }
-            renderAuthorizedGmailsList();
-        });
-    </script>
+    function removeTableRow(btn) {
+      const tbody = document.getElementById('itemsTableBody');
+      if (tbody.children.length > 1) {
+        btn.closest('tr').remove();
+        calculateTotals();
+      } else {
+        alert('At least one item is required.');
+      }
+    }
+
+    function calculateTotals() {
+      const rows = document.querySelectorAll('#itemsTableBody tr');
+      let subtotal = 0;
+
+      rows.forEach(row => {
+        const qty = parseFloat(row.querySelector('.item-qty').value) || 0;
+        const rate = parseFloat(row.querySelector('.item-rate').value) || 0;
+        const total = qty * rate;
+        subtotal += total;
+        row.querySelector('.item-total').innerText = 'PKR ' + total.toLocaleString();
+      });
+
+      const discount = parseFloat(document.getElementById('discountInput').value) || 0;
+      const grandTotal = Math.max(0, subtotal - discount);
+
+      document.getElementById('subTotalDisplay').innerText = 'PKR ' + subtotal.toLocaleString();
+      document.getElementById('grandTotalDisplay').innerText = 'PKR ' + grandTotal.toLocaleString();
+    }
+
+    // --- SAVED DOCUMENTS LOGIC ---
+    function saveCurrentDocument() {
+      const docType = document.getElementById('docType').value;
+      const docNumber = document.getElementById('docNumber').value.trim();
+      const clientName = document.getElementById('clientName').value.trim();
+      const docDate = document.getElementById('docDate').value;
+      
+      if (!clientName) {
+        alert('Please enter a client name!');
+        return;
+      }
+
+      const rows = document.querySelectorAll('#itemsTableBody tr');
+      let items = [];
+      let subtotal = 0;
+
+      rows.forEach(row => {
+        const desc = row.querySelector('.item-desc').value;
+        const qty = parseFloat(row.querySelector('.item-qty').value) || 0;
+        const rate = parseFloat(row.querySelector('.item-rate').value) || 0;
+        items.push({ desc, qty, rate, total: qty * rate });
+        subtotal += (qty * rate);
+      });
+
+      const discount = parseFloat(document.getElementById('discountInput').value) || 0;
+      const grandTotal = Math.max(0, subtotal - discount);
+
+      const docObj = {
+        id: Date.now(),
+        docType,
+        docNumber,
+        clientName,
+        docDate,
+        items,
+        subtotal,
+        discount,
+        grandTotal
+      };
+
+      savedDocs.push(docObj);
+      localStorage.setItem('izhar_saved_docs', JSON.stringify(savedDocs));
+      alert('Document saved successfully!');
+      renderSavedDocs();
+    }
+
+    function renderSavedDocs() {
+      const container = document.getElementById('savedDocsTableBody');
+      container.innerHTML = '';
+
+      if (savedDocs.length === 0) {
+        container.innerHTML = `<tr><td colspan="6" class="p-4 text-center text-slate-500 text-sm">No saved documents found.</td></tr>`;
+        return;
+      }
+
+      savedDocs.forEach((doc, idx) => {
+        const tr = document.createElement('tr');
+        tr.className = 'border-b border-slate-100 hover:bg-slate-50 text-sm';
+        tr.innerHTML = `
+          <td class="p-3 font-semibold text-slate-900">${doc.docNumber}</td>
+          <td class="p-3"><span class="px-2 py-1 rounded text-xs font-semibold ${doc.docType === 'Quotation' ? 'bg-amber-100 text-amber-800' : 'bg-blue-100 text-blue-800'}">${doc.docType}</span></td>
+          <td class="p-3 text-slate-700">${doc.clientName}</td>
+          <td class="p-3 text-slate-500">${doc.docDate}</td>
+          <td class="p-3 font-semibold text-slate-900">PKR ${doc.grandTotal.toLocaleString()}</td>
+          <td class="p-3 text-center space-x-2">
+            <button onclick="deleteSavedDoc(${idx})" class="text-red-500 hover:text-red-700 p-1">
+              <i class="fa-solid fa-trash"></i>
+            </button>
+          </td>
+        `;
+        container.appendChild(tr);
+      });
+    }
+
+    function deleteSavedDoc(index) {
+      if (confirm('Delete this document from history?')) {
+        savedDocs.splice(index, 1);
+        localStorage.setItem('izhar_saved_docs', JSON.stringify(savedDocs));
+        renderSavedDocs();
+      }
+    }
+
+    // --- AUTHORIZED GMAIL LOGIC (FIXED) ---
+    function renderAuthorizedEmails() {
+      const container = document.getElementById('authorizedEmailsList');
+      if (!container) return;
+
+      container.innerHTML = '';
+
+      if (authorizedEmails.length === 0) {
+        container.innerHTML = `
+          <div class="p-4 bg-slate-50 border border-dashed border-slate-200 rounded-lg text-center text-slate-500 text-xs">
+            Koi authorized Gmail add nahi hai.
+          </div>
+        `;
+        return;
+      }
+
+      authorizedEmails.forEach((email, index) => {
+        const item = document.createElement('div');
+        item.className = 'flex justify-between items-center bg-slate-50 border border-slate-200 px-4 py-2.5 rounded-lg';
+        
+        item.innerHTML = `
+          <div class="flex items-center gap-2">
+            <i class="fa-regular fa-envelope text-slate-500 text-sm"></i>
+            <span class="text-sm font-medium text-slate-800">${email}</span>
+          </div>
+          <button type="button" onclick="deleteAuthorizedEmail(${index})" class="bg-red-50 hover:bg-red-100 text-red-600 px-3 py-1 rounded-md text-xs font-medium border border-red-200 transition flex items-center gap-1">
+            <i class="fa-solid fa-trash"></i> Delete
+          </button>
+        `;
+        container.appendChild(item);
+      });
+    }
+
+    function addAuthorizedEmail() {
+      const input = document.getElementById('authEmailInput');
+      const email = input.value.trim();
+
+      if (!email) {
+        alert('Pehle Gmail address enter karein!');
+        return;
+      }
+
+      if (!email.includes('@')) {
+        alert('Sahi Email format enter karein!');
+        return;
+      }
+
+      if (authorizedEmails.includes(email)) {
+        alert('Yeh Email pehle se list mein mojood hai!');
+        return;
+      }
+
+      authorizedEmails.push(email);
+      localStorage.setItem('authorizedEmails', JSON.stringify(authorizedEmails));
+      input.value = '';
+      renderAuthorizedEmails(); // Dynamic Refresh
+    }
+
+    function deleteAuthorizedEmail(index) {
+      if (confirm('Kya aap is Gmail ko remove karna chahte hain?')) {
+        authorizedEmails.splice(index, 1);
+        localStorage.setItem('authorizedEmails', JSON.stringify(authorizedEmails));
+        renderAuthorizedEmails(); // Dynamic Refresh
+      }
+    }
+  </script>
 </body>
 </html>
