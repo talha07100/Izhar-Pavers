@@ -199,7 +199,7 @@ body:has(.documents-portal.open) .saved-card{display:none}
 .master-terms-editor-list{display:grid;gap:10px}
 .master-term-box{display:grid;grid-template-columns:32px minmax(0,1fr);grid-template-rows:auto auto;align-items:start;gap:10px;background:#f8fafc;border:1px solid #d9e0e8;border-radius:12px;padding:10px;box-sizing:border-box;width:100%}
 .master-term-number{grid-column:1;grid-row:1;width:32px;height:32px;min-width:32px;border-radius:9px;background:#14213d;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px;margin-top:1px}
-.master-term-input{grid-column:1 / -1;grid-row:2;display:block;flex:none;min-width:0;min-height:200px;width:100%;border:1px solid #cfd7e2;border-radius:9px;padding:12px 10px;font:inherit;resize:vertical;background:#fff;box-sizing:border-box}
+.master-term-input{grid-column:1 / -1;grid-row:2;display:block;flex:none;min-width:0;min-height:100px;width:100%;border:1px solid #cfd7e2;border-radius:9px;padding:12px 10px;font:inherit;resize:vertical;background:#fff;box-sizing:border-box}
 .master-term-box > .term-style-controls{grid-column:2;grid-row:1;display:flex !important;align-items:center;gap:6px;flex-wrap:wrap;min-width:0;width:100%}
 .master-term-delete{min-width:34px;height:34px;padding:0;border-radius:9px}
 .term-row{position:relative;padding-left:42px}.term-style-controls{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:7px}.term-style-btn{min-width:34px;height:32px;padding:0 8px;border-radius:8px}.term-style-btn.active{background:#14213d;color:#fff;border-color:#14213d}.term-size-label{font-size:12px;font-weight:700;color:#596273;min-width:44px;text-align:center}
@@ -274,8 +274,8 @@ body:has(.documents-portal.open) .saved-card{display:none}
   flex:1 1 auto !important;
   width:100% !important;
   min-width:0 !important;
-  min-height:200px !important;
-  height:auto !important;
+  min-height:100px !important;
+  height:100px !important;
   padding:12px !important;
   border:1px solid #cfd7e2 !important;
   border-radius:9px !important;
@@ -311,7 +311,8 @@ body:has(.documents-portal.open) .saved-card{display:none}
   #termsList .actual-term-editor-row{padding:10px !important}
   #termsList .actual-term-writing-row{gap:8px !important}
   #termsList .actual-term-textarea{
-    min-height:200px !important;
+    min-height:100px !important;
+    height:100px !important;
     font-size:16px !important;
     line-height:1.5 !important;
   }
@@ -349,7 +350,7 @@ body:has(.documents-portal.open) .saved-card{display:none}
     grid-row:2 !important;
     width:100% !important;
     min-width:0 !important;
-    min-height:200px !important;
+    min-height:100px !important;
     box-sizing:border-box !important;
   }
 }
