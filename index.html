@@ -1327,10 +1327,10 @@ function saveMasterTerms(){
     const st=document.getElementById("termsSettingsStatus"); if(st) st.textContent="Please enter at least one term.";
     return;
   }
-  // Save ONLY as the default template for future New Files.
-  // Do not replace the Terms in the currently open document.
+  // Save ONLY as the default Terms template for FUTURE New Files.
+  // Never replace Terms inside the document currently being edited.
   localStorage.setItem(DEFAULT_TERMS_KEY,JSON.stringify(terms));
-  const st=document.getElementById("termsSettingsStatus"); if(st) st.textContent="Default Terms & Conditions saved for new files.";
+  const st=document.getElementById("termsSettingsStatus"); if(st) st.textContent="Terms & Conditions saved for new files.";
   updateTermsHistoryButtons();
 }
 function isTermsAuthLocked(){
@@ -1677,9 +1677,8 @@ function currentDocumentData(){
       rows:getPaymentData()
     },
     terms:getTermData(),
-    // Freeze the profile/signature/stamp used by this document.
-    // Existing documents keep their original snapshot even after Settings change.
-    savedProfile: activeDocumentProfileSnapshot
+    // Freeze the exact Profile / Signature / Stamp used by this document.
+    savedProfile:activeDocumentProfileSnapshot
       ? JSON.parse(JSON.stringify(activeDocumentProfileSnapshot))
       : JSON.parse(JSON.stringify(getProfileSettings())),
     savedAt:new Date().toISOString()
@@ -1764,7 +1763,6 @@ async function openSavedDocumentPDF(id){
   // The folder remains open and the saved document is restored afterwards.
   const previous=currentDocumentData();
   const previousEditingId=currentEditingDocumentId;
-  const previousProfileSnapshot=activeDocumentProfileSnapshot ? JSON.parse(JSON.stringify(activeDocumentProfileSnapshot)) : null;
   try{
     applySavedDocumentToForm(doc,false);
     const ok=await generatePDF(true);
@@ -1775,7 +1773,6 @@ async function openSavedDocumentPDF(id){
   }finally{
     applySavedDocumentToForm(previous,false);
     currentEditingDocumentId=previousEditingId;
-    activeDocumentProfileSnapshot=previousProfileSnapshot;
     renderSavedDocuments();
   }
 }
@@ -1786,7 +1783,6 @@ async function printSavedDocument(id){
   if(!doc)return;
   const previous=currentDocumentData();
   const previousEditingId=currentEditingDocumentId;
-  const previousProfileSnapshot=activeDocumentProfileSnapshot ? JSON.parse(JSON.stringify(activeDocumentProfileSnapshot)) : null;
   try{
     applySavedDocumentToForm(doc,false);
     const ok=await generatePDF(false,true);
@@ -1797,7 +1793,6 @@ async function printSavedDocument(id){
   }finally{
     applySavedDocumentToForm(previous,false);
     currentEditingDocumentId=previousEditingId;
-    activeDocumentProfileSnapshot=previousProfileSnapshot;
     renderSavedDocuments();
     renderDocumentPortal();
   }
@@ -1812,7 +1807,6 @@ async function downloadSavedDocument(id){
   // The current unsaved form is restored afterwards so nothing gets lost.
   const previous=currentDocumentData();
   const previousEditingId=currentEditingDocumentId;
-  const previousProfileSnapshot=activeDocumentProfileSnapshot ? JSON.parse(JSON.stringify(activeDocumentProfileSnapshot)) : null;
   try{
     applySavedDocumentToForm(doc,false);
     const ok=await generatePDF();
@@ -1823,7 +1817,6 @@ async function downloadSavedDocument(id){
   }finally{
     applySavedDocumentToForm(previous,false);
     currentEditingDocumentId=previousEditingId;
-    activeDocumentProfileSnapshot=previousProfileSnapshot;
     renderSavedDocuments();
   }
 }
@@ -1831,8 +1824,9 @@ async function downloadSavedDocument(id){
 function applySavedDocumentToForm(doc, closePortal=true){
   if(!doc)return;
   currentEditingDocumentId=doc.id||null;
-  // Restore the exact profile/signature/stamp snapshot saved with this document.
-  activeDocumentProfileSnapshot = doc.savedProfile
+  // Restore this document's own Profile / Signature / Stamp snapshot.
+  // Legacy documents without a snapshot use the current Settings profile once.
+  activeDocumentProfileSnapshot=doc.savedProfile
     ? JSON.parse(JSON.stringify(doc.savedProfile))
     : JSON.parse(JSON.stringify(getProfileSettings()));
   if(closePortal) closeSavedFolder();
