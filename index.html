@@ -391,6 +391,15 @@ body:has(.documents-portal.open) .saved-card{display:none}
 <button class="btn secondary" id="addAdminBtn" onclick="addAdmin()" type="button">+ Add Admin</button>
 </div>
 <div class="auth-note" style="margin-top:8px">An Admin added here is automatically authorized to use the app.</div>
+<div class="auth-note" style="margin-top:18px;font-weight:800">Transfer Ownership</div>
+<div class="auth-note" style="margin-top:6px">Choose an existing Admin to become the new Owner. The current Owner will remain authorized to use the app, but will no longer have Admin control.</div>
+<div class="ownership-row" style="margin-top:8px;display:flex;flex-direction:column;gap:8px">
+<select id="newOwnerAdminSelect" style="width:100%;padding:12px;border:1px solid #d1d5db;border-radius:9px;background:#fff;font:inherit">
+<option value="">Select an Admin</option>
+</select>
+<button class="btn primary" id="transferOwnershipBtn" onclick="transferAdminOwnership()" type="button">Transfer Ownership</button>
+</div>
+<div class="auth-note" style="margin-top:8px">For safety, the new Owner must first be added as an Admin.</div>
 </div>
 <div class="card" id="referenceSettingsCard">
 <h3 style="margin-top:0">Reference &amp; Serial Number Settings</h3>
@@ -2368,6 +2377,14 @@ function renderAuthorizationUI(){
   const navAuth=document.getElementById("settingsNavAuthorization"); if(navAuth) navAuth.style.display=isAdmin?"block":"none";
   const navOwner=document.getElementById("settingsNavOwnership"); if(navOwner) navOwner.style.display=isAdmin?"block":"none";
   const addAdminBtn=document.getElementById("addAdminBtn"); if(addAdminBtn) addAdminBtn.disabled=!isOwner;
+  const transferBtn=document.getElementById("transferOwnershipBtn"); if(transferBtn) transferBtn.disabled=!isOwner;
+  const ownerSelect=document.getElementById("newOwnerAdminSelect");
+  if(ownerSelect){
+    const currentOwner=getCurrentOwnerEmail();
+    const eligible=getAdminEmails().filter(e=>e!==currentOwner);
+    ownerSelect.innerHTML='<option value="">Select an Admin</option>'+eligible.map(e=>'<option value="'+escapeHtml(e)+'">'+escapeHtml(e)+'</option>').join('');
+    ownerSelect.disabled=!isOwner || !eligible.length;
+  }
   renderAuthorizationList();
   renderAdminList();
 }
@@ -2551,6 +2568,35 @@ window.removeAdmin=async function(email){
     authorizationConfig.adminEmails=before;
     renderAuthorizationUI();
     alert("Admin removal failed: "+(e?.message||e));
+  }
+};
+
+window.transferAdminOwnership=async function(){
+  if(!isOwnerAccount()){ alert("Only the current Owner can transfer ownership."); return; }
+  const select=document.getElementById("newOwnerAdminSelect");
+  const newOwner=normalizeEmail(select?.value);
+  const oldOwner=getCurrentOwnerEmail();
+  const admins=getAdminEmails();
+  if(!newOwner){ alert("Please select an Admin to become the new Owner."); return; }
+  if(newOwner===oldOwner){ alert("The current Owner is already the Owner."); return; }
+  if(!admins.includes(newOwner)){ alert("The new Owner must first be an existing Admin."); return; }
+  if(!cloudDb){ alert("Cloud connection is not ready. Please wait a moment and try again."); return; }
+  if(!confirm("Transfer ownership to "+newOwner+"?\n\nThe current Owner will lose Admin control but will remain an authorized user. This action can only be reversed by the new Owner.")) return;
+  const nextAdmins=[...new Set(admins.filter(e=>e!==oldOwner))];
+  if(!nextAdmins.includes(newOwner)) nextAdmins.unshift(newOwner);
+  const nextAuthorized=[...new Set([...(authorizationConfig.authorizedEmails||[]).map(normalizeEmail).filter(Boolean),oldOwner,newOwner])];
+  const nextConfig={ownerEmail:newOwner,enabled:!!authorizationConfig.enabled,authorizedEmails:nextAuthorized,adminEmails:nextAdmins.slice(0,4),updatedAt:new Date().toISOString()};
+  try{
+    await withTimeout(setDoc(doc(cloudDb,"appConfig","authorization"),nextConfig,{merge:true}),8000,"Ownership transfer");
+    authorizationConfig=nextConfig;
+    localStorage.setItem("izhar_pavers_authorization_config_v1",JSON.stringify(nextConfig));
+    mirrorAuthorizationLocalStorage();
+    renderAuthorizationUI();
+    alert("Ownership transferred successfully to "+newOwner+". You will now be signed out.");
+    await signOut(cloudAuth);
+  }catch(e){
+    console.error(e);
+    alert("Ownership transfer failed: "+(e?.message||e));
   }
 };
 

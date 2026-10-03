@@ -25,37 +25,40 @@ service cloud.firestore {
     function currentAdmin() {
       return signedIn()
         && exists(/databases/$(database)/documents/appConfig/authorization)
-        && (
-          currentOwner()
-          || (
-            'adminEmails' in authDoc().data
-            && request.auth.token.email in authDoc().data.adminEmails
-          )
-        );
+        && 'adminEmails' in authDoc().data
+        && request.auth.token.email in authDoc().data.adminEmails;
+    }
+
+    function validAdminList(data) {
+      return 'adminEmails' in data
+        && data.adminEmails.size() >= 1
+        && data.adminEmails.size() <= 4
+        && data.adminEmails.hasAll([data.ownerEmail]);
     }
 
     match /appConfig/authorization {
       allow read: if signedIn();
 
-      // Initial document can only be created by the permanent Owner.
       allow create: if bootstrapOwner()
         && request.resource.data.ownerEmail == 'talhakhan14746@gmail.com'
-        && 'adminEmails' in request.resource.data
-        && request.resource.data.adminEmails.size() >= 1
-        && request.resource.data.adminEmails.size() <= 4
-        && request.resource.data.adminEmails.hasAll(['talhakhan14746@gmail.com']);
+        && validAdminList(request.resource.data);
 
-      // Any Admin can manage approved-user authorization and the ON/OFF switch.
-      // Only the Owner can change the Admin list.
       allow update: if currentAdmin()
-        && request.resource.data.ownerEmail == resource.data.ownerEmail
-        && 'adminEmails' in request.resource.data
-        && request.resource.data.adminEmails.size() >= 1
-        && request.resource.data.adminEmails.size() <= 4
-        && request.resource.data.adminEmails.hasAll([resource.data.ownerEmail])
+        && validAdminList(request.resource.data)
         && (
-          currentOwner()
-          || request.resource.data.adminEmails == resource.data.adminEmails
+          // Normal Admin/Authorization changes: Owner stays the same and only
+          // an Admin may change authorization data.
+          (request.resource.data.ownerEmail == resource.data.ownerEmail
+            && (currentOwner() || request.resource.data.adminEmails == resource.data.adminEmails))
+          ||
+          // Ownership transfer: ONLY the current Owner may change ownerEmail.
+          // The new Owner must already be an Admin and the old Owner must be
+          // removed from the Admin list. The new Owner is kept authorized.
+          (currentOwner()
+            && request.resource.data.ownerEmail != resource.data.ownerEmail
+            && request.resource.data.ownerEmail in request.resource.data.adminEmails
+            && !(resource.data.ownerEmail in request.resource.data.adminEmails)
+            && request.resource.data.authorizedEmails.hasAll([request.resource.data.ownerEmail]))
         );
 
       allow delete: if false;
