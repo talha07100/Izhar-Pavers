@@ -2,6 +2,7 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
+
     function authDoc() {
       return /databases/$(database)/documents/appConfig/authorization;
     }
@@ -10,45 +11,52 @@ service cloud.firestore {
       return exists(authDoc());
     }
 
+    function signedIn() {
+      return request.auth != null;
+    }
+
     function isBootstrapOwner() {
-      return request.auth != null
+      return signedIn()
         && request.auth.token.email == 'talhakhan14746@gmail.com';
     }
 
-    function isCurrentOwner() {
-      return request.auth != null
+    function isCurrentAdmin() {
+      return signedIn()
+        && hasAuthConfig()
         && (
-          (!hasAuthConfig() && isBootstrapOwner())
-          || (hasAuthConfig()
-              && request.auth.token.email == get(authDoc()).data.ownerEmail)
+          (
+            get(authDoc()).data.adminEmails is list
+            && request.auth.token.email in get(authDoc()).data.adminEmails
+          )
+          || request.auth.token.email == get(authDoc()).data.ownerEmail
         );
     }
 
     function appAccessAllowed() {
-      return request.auth != null
+      return signedIn()
         && (
           !hasAuthConfig()
-          || isCurrentOwner()
+          || isCurrentAdmin()
           || get(authDoc()).data.enabled != true
           || request.auth.token.email in get(authDoc()).data.authorizedEmails
         );
     }
 
     match /appConfig/authorization {
-      // Signed-in users may read the authorization state so the app can decide access.
-      allow read: if request.auth != null;
+      allow read: if signedIn();
 
-      // The original bootstrap owner creates the configuration the first time.
+      // First-time creation is restricted to the bootstrap owner.
       allow create: if isBootstrapOwner() && !hasAuthConfig();
 
-      // Only the current admin can change authorization or ownership.
-      allow update: if isCurrentOwner();
+      // All configured Admins may manage Admins, authorization and Terms Lock.
+      allow update: if isCurrentAdmin();
+
       allow delete: if false;
     }
 
     match /users/{userId}/{document=**} {
       allow read, write:
-        if request.auth != null
+        if signedIn()
         && request.auth.uid == userId
         && appAccessAllowed();
     }
