@@ -381,23 +381,16 @@ body:has(.documents-portal.open) .saved-card{display:none}
 <div class="auth-note" style="margin-top:8px">Approved Gmail accounts:</div><div class="auth-list" id="authorizationList"></div>
 </div>
 <div class="ownership-card" id="ownershipCard" style="display:none">
-<h3 style="margin:0 0 5px">👑 Admin Ownership</h3>
-<div class="auth-note">Up to <strong>4 Admins</strong> can manage the app. The Owner is protected and cannot be removed or replaced.</div>
+<h3 style="margin:0 0 5px">👑 Admin Management</h3>
+<div class="auth-note">Up to <strong>4 Admins</strong> can manage the app. The Owner is permanent and cannot be removed. Only the Owner can add or remove Admins.</div>
 <div class="auth-note" style="margin-top:10px;font-weight:800">Current Admins:</div>
 <div class="auth-list" id="adminList"></div>
-<div class="auth-note" style="margin-top:14px;font-weight:800">Transfer Admin Slot</div>
-<div class="auth-note">Replace an existing Admin with a new Gmail address. The Owner cannot be used as the old Admin.</div>
-<div class="ownership-row" style="margin-top:10px;display:flex;flex-direction:column;gap:8px">
-<input id="oldAdminEmailInput" placeholder="Old Admin Gmail address" type="email"/>
-<input id="newAdminEmailInput" placeholder="New Admin Gmail address" type="email"/>
-<button class="btn primary" onclick="transferAdminOwnership()" type="button">Transfer Admin</button>
-</div>
 <div class="auth-note" style="margin-top:14px;font-weight:800">Add Admin</div>
 <div class="ownership-row" style="margin-top:8px;display:flex;flex-direction:column;gap:8px">
 <input id="addAdminEmailInput" placeholder="Enter Gmail to add as Admin" type="email"/>
-<button class="btn secondary" onclick="addAdmin()" type="button">+ Add Admin</button>
+<button class="btn secondary" id="addAdminBtn" onclick="addAdmin()" type="button">+ Add Admin</button>
 </div>
-<div class="auth-note" style="margin-top:8px">An Admin added here is also automatically authorized to use the app.</div>
+<div class="auth-note" style="margin-top:8px">An Admin added here is automatically authorized to use the app.</div>
 </div>
 <div class="card" id="referenceSettingsCard">
 <h3 style="margin-top:0">Reference &amp; Serial Number Settings</h3>
@@ -2293,9 +2286,7 @@ function normalizeEmail(v){ return String(v||"").trim().toLowerCase(); }
 function getCurrentOwnerEmail(){ return normalizeEmail(authorizationConfig.ownerEmail||BOOTSTRAP_OWNER_EMAIL); }
 function getAdminEmails(){
   const owner=getCurrentOwnerEmail();
-  const raw=Array.isArray(authorizationConfig.adminEmails)
-    ? authorizationConfig.adminEmails
-    : (Array.isArray(authorizationConfig.authorizedEmails) ? authorizationConfig.authorizedEmails : []);
+  const raw=Array.isArray(authorizationConfig.adminEmails) ? authorizationConfig.adminEmails : [];
   return [...new Set([owner,...raw.map(normalizeEmail).filter(Boolean)])].slice(0,4);
 }
 function isOwnerAccount(user=cloudUser){
@@ -2369,13 +2360,14 @@ function renderAuthorizationUI(){
   const isAdmin=isAdminAccount();
   const isOwner=isOwnerAccount();
   if(card) card.style.display=isAdmin?"block":"none";
-  if(ownership) ownership.style.display=isAdmin?"block":"none";
+  if(ownership) ownership.style.display=isOwner?"block":"none";
   const ownerLabel=document.querySelector("#authorizationCard .auth-note strong"); if(ownerLabel) ownerLabel.textContent=currentOwner;
   const ownerEmailEl=document.getElementById("currentOwnerEmail"); if(ownerEmailEl) ownerEmailEl.textContent=currentOwner;
   const cb=document.getElementById("authorizationEnabled"); if(cb){ cb.checked=!!authorizationConfig.enabled; cb.disabled=!isOwner; }
   const menuBtn=document.getElementById("mobileAuthorizationBtn"); if(menuBtn) menuBtn.style.display=isAdmin ? "block" : "none";
   const navAuth=document.getElementById("settingsNavAuthorization"); if(navAuth) navAuth.style.display=isAdmin?"block":"none";
   const navOwner=document.getElementById("settingsNavOwnership"); if(navOwner) navOwner.style.display=isAdmin?"block":"none";
+  const addAdminBtn=document.getElementById("addAdminBtn"); if(addAdminBtn) addAdminBtn.disabled=!isOwner;
   renderAuthorizationList();
   renderAdminList();
 }
@@ -2394,7 +2386,7 @@ async function saveAuthorizationConfig(){
     ownerEmail:currentOwner,
     enabled:authorizationConfig.enabled===true,
     authorizedEmails:[...new Set([currentOwner,...(authorizationConfig.authorizedEmails||[]).map(normalizeEmail).filter(Boolean)])],
-    adminEmails,
+    adminEmails:[...new Set([currentOwner,...adminEmails])].slice(0,4),
     updatedAt
   };
   localStorage.setItem("izhar_pavers_authorization_config_v1",JSON.stringify(authorizationConfig));
@@ -2402,11 +2394,8 @@ async function saveAuthorizationConfig(){
   renderAuthorizationUI();
   if(!cloudDb) throw new Error("Cloud connection is not ready. The setting is saved locally and will sync when Firebase reconnects.");
   const ref=doc(cloudDb,"appConfig","authorization");
-  await withTimeout(
-    setDoc(ref,{ownerEmail:authorizationConfig.ownerEmail,enabled:authorizationConfig.enabled,authorizedEmails:authorizationConfig.authorizedEmails,adminEmails:authorizationConfig.adminEmails,updatedAt},{merge:true}),
-    8000,
-    "Authorization cloud save"
-  );
+  const payload={ownerEmail:authorizationConfig.ownerEmail,enabled:authorizationConfig.enabled,authorizedEmails:authorizationConfig.authorizedEmails,adminEmails:authorizationConfig.adminEmails,updatedAt};
+  await withTimeout(setDoc(ref,payload,{merge:true}),8000,"Authorization cloud save");
   return true;
 }
 async function retrySaveAuthorizationConfig(){
@@ -2427,7 +2416,7 @@ async function loadAuthorizationConfig(){
         adminEmails:Array.isArray(cached.adminEmails)?cached.adminEmails.map(normalizeEmail).filter(Boolean):[],
         updatedAt:localUpdatedAt
       };
-      if(!authorizationConfig.adminEmails.length) authorizationConfig.adminEmails=[...new Set([authorizationConfig.ownerEmail,...authorizationConfig.authorizedEmails])];
+      if(!authorizationConfig.adminEmails.length) authorizationConfig.adminEmails=[authorizationConfig.ownerEmail];
     }
   }catch(e){}
 
@@ -2444,7 +2433,7 @@ async function loadAuthorizationConfig(){
       if(!localUpdatedAt || !cloudUpdatedAt || cloudUpdatedAt>=localUpdatedAt){
         const owner=normalizeEmail(d.ownerEmail)||BOOTSTRAP_OWNER_EMAIL;
         const authEmails=Array.isArray(d.authorizedEmails)?d.authorizedEmails.map(normalizeEmail).filter(Boolean):[owner];
-        const adminEmails=Array.isArray(d.adminEmails)?d.adminEmails.map(normalizeEmail).filter(Boolean):authEmails;
+        const adminEmails=Array.isArray(d.adminEmails)?d.adminEmails.map(normalizeEmail).filter(Boolean):[owner];
         authorizationConfig={
           ownerEmail:owner,
           enabled:d.enabled===true,
@@ -2462,7 +2451,7 @@ async function loadAuthorizationConfig(){
         ownerEmail:owner,
         enabled:authorizationConfig.enabled===true,
         authorizedEmails:[...new Set([owner,...(authorizationConfig.authorizedEmails||[]).map(normalizeEmail).filter(Boolean)])],
-        adminEmails:[...new Set([owner,...getAdminEmails()])],
+        adminEmails:[owner],
         updatedAt:localUpdatedAt||new Date().toISOString()
       };
       await withTimeout(setDoc(doc(cloudDb,"appConfig","authorization"),{ownerEmail:owner,enabled:authorizationConfig.enabled,authorizedEmails:authorizationConfig.authorizedEmails,adminEmails:authorizationConfig.adminEmails,updatedAt:authorizationConfig.updatedAt},{merge:true}),8000,"Authorization cloud create");
@@ -2524,12 +2513,15 @@ window.removeAuthorizedEmail=async function(email){
   catch(e){ renderAuthorizationUI(); setCloudMessage(email+" removed on this device. Cloud save is pending: "+e.message); }
 };
 window.addAdmin=async function(){
-  if(!isAdminAccount())return;
-  const input=document.getElementById("addAdminEmailInput"), email=normalizeEmail(input?.value), admins=getAdminEmails();
+  if(!isOwnerAccount()){alert("Only the Owner can add or remove Admins.");return;}
+  const input=document.getElementById("addAdminEmailInput");
+  const email=normalizeEmail(input?.value);
+  const admins=getAdminEmails();
   if(!email){alert("Please enter the Admin Gmail address.");return;}
   if(!/^[-a-z0-9._%+]+@gmail\.com$/i.test(email)){alert("Please enter a valid Gmail address (example@gmail.com).");return;}
+  if(email===getCurrentOwnerEmail()){alert("This Gmail is already the Owner.");return;}
   if(admins.includes(email)){alert("This Gmail is already an Admin.");return;}
-  if(admins.length>=4){alert("Maximum 4 Admins are allowed. Remove an Admin first or use Transfer Admin.");return;}
+  if(admins.length>=4){alert("Maximum 4 Admins are allowed. Remove an Admin first.");return;}
   const before=[...admins];
   authorizationConfig.adminEmails=[...admins,email];
   authorizationConfig.authorizedEmails=[...new Set([...(authorizationConfig.authorizedEmails||[]),email])];
@@ -2546,8 +2538,8 @@ window.addAdmin=async function(){
 window.removeAdmin=async function(email){
   email=normalizeEmail(email);
   const owner=getCurrentOwnerEmail(), admins=getAdminEmails();
-  if(!isAdminAccount()||!email)return;
-  if(email===owner){alert("The Owner cannot be removed.");return;}
+  if(!isOwnerAccount()){alert("Only the Owner can add or remove Admins.");return;}
+  if(!email || email===owner){alert("The Owner cannot be removed.");return;}
   if(!admins.includes(email)){alert("This Gmail is not an Admin.");return;}
   if(!confirm("Remove "+email+" from Admins?\n\nThey will remain an authorized user if Authorization is ON, but they will no longer have Admin access."))return;
   const before=[...admins];
@@ -2561,38 +2553,13 @@ window.removeAdmin=async function(email){
     alert("Admin removal failed: "+(e?.message||e));
   }
 };
+
 window.refreshAuthorizationSettings=async function(){
   if(!isAdminAccount()){ setCloudMessage("Only an Admin can manage authorization."); return; }
   if(!cloudDb){ setCloudMessage("Firebase is still connecting. Please wait a moment and try again."); return; }
   try{ await loadAuthorizationConfig(); renderAuthorizationUI(); setCloudMessage("Authorization settings loaded from Firebase."); }
   catch(e){ console.error(e); setCloudMessage("Unable to load authorization settings: "+(e?.message||e)); }
 };
-window.transferAdminOwnership=async function(){
-  if(!isAdminAccount())return;
-  const oldEmail=normalizeEmail(document.getElementById("oldAdminEmailInput")?.value);
-  const newEmail=normalizeEmail(document.getElementById("newAdminEmailInput")?.value);
-  const owner=getCurrentOwnerEmail(), admins=getAdminEmails();
-  if(!oldEmail||!newEmail){alert("Please enter both Old Admin and New Admin Gmail addresses.");return;}
-  if(!/^[-a-z0-9._%+]+@gmail\.com$/i.test(oldEmail)||!/^[-a-z0-9._%+]+@gmail\.com$/i.test(newEmail)){alert("Please enter valid Gmail addresses.");return;}
-  if(oldEmail===owner){alert("The Owner cannot be replaced.");return;}
-  if(!admins.includes(oldEmail)){alert("Old Admin Gmail must already be in the Current Admins list.");return;}
-  if(newEmail===owner||admins.includes(newEmail)){alert("New Admin Gmail is already an Owner/Admin.");return;}
-  if(!confirm("Replace Admin "+oldEmail+" with "+newEmail+"?"))return;
-  const before=[...admins];
-  authorizationConfig.adminEmails=admins.map(x=>x===oldEmail?newEmail:x);
-  authorizationConfig.authorizedEmails=[...new Set([...(authorizationConfig.authorizedEmails||[]),newEmail])];
-  try{
-    await saveAuthorizationConfig();
-    const oldInput=document.getElementById("oldAdminEmailInput"), newInput=document.getElementById("newAdminEmailInput");
-    if(oldInput)oldInput.value=""; if(newInput)newInput.value="";
-    setCloudMessage("Admin slot transferred from "+oldEmail+" to "+newEmail+".");
-  }catch(e){
-    authorizationConfig.adminEmails=before;
-    renderAuthorizationUI();
-    alert("Admin transfer failed: "+(e?.message||e));
-  }
-};
-
 function withTimeout(promise, ms, label){
   return Promise.race([
     promise,

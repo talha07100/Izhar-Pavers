@@ -12,36 +12,57 @@ service cloud.firestore {
         && request.auth.token.email == 'talhakhan14746@gmail.com';
     }
 
-    function existingAdmin() {
+    function authDoc() {
+      return get(/databases/$(database)/documents/appConfig/authorization);
+    }
+
+    function currentOwner() {
       return signedIn()
         && exists(/databases/$(database)/documents/appConfig/authorization)
-        && request.auth.token.email in get(/databases/$(database)/documents/appConfig/authorization).data.adminEmails;
+        && request.auth.token.email == authDoc().data.ownerEmail;
+    }
+
+    function currentAdmin() {
+      return signedIn()
+        && exists(/databases/$(database)/documents/appConfig/authorization)
+        && (
+          currentOwner()
+          || (
+            'adminEmails' in authDoc().data
+            && request.auth.token.email in authDoc().data.adminEmails
+          )
+        );
     }
 
     match /appConfig/authorization {
       allow read: if signedIn();
 
-      // The first authorization document can only be created by the Owner.
+      // Initial document can only be created by the permanent Owner.
       allow create: if bootstrapOwner()
         && request.resource.data.ownerEmail == 'talhakhan14746@gmail.com'
+        && 'adminEmails' in request.resource.data
         && request.resource.data.adminEmails.size() >= 1
         && request.resource.data.adminEmails.size() <= 4
         && request.resource.data.adminEmails.hasAll(['talhakhan14746@gmail.com']);
 
-      // Existing Admins may manage the Admin list and authorization list.
-      // The Owner email itself cannot be changed or removed.
-      allow update: if (bootstrapOwner() || existingAdmin())
+      // Any Admin can manage approved-user authorization and the ON/OFF switch.
+      // Only the Owner can change the Admin list.
+      allow update: if currentAdmin()
         && request.resource.data.ownerEmail == resource.data.ownerEmail
+        && 'adminEmails' in request.resource.data
         && request.resource.data.adminEmails.size() >= 1
         && request.resource.data.adminEmails.size() <= 4
-        && request.resource.data.adminEmails.hasAll([resource.data.ownerEmail]);
+        && request.resource.data.adminEmails.hasAll([resource.data.ownerEmail])
+        && (
+          currentOwner()
+          || request.resource.data.adminEmails == resource.data.adminEmails
+        );
 
       allow delete: if false;
     }
 
     match /users/{userId}/{document=**} {
-      allow read, write:
-        if signedIn() && request.auth.uid == userId;
+      allow read, write: if signedIn() && request.auth.uid == userId;
     }
   }
 }
