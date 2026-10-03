@@ -44,12 +44,10 @@ textarea{min-height:70px;resize:vertical}
 .term-color-option.active{outline:2px solid #0b2d69;outline-offset:1px}
 
 @media(max-width:700px){
-  .term-row{display:grid;grid-template-columns:1fr;gap:9px;margin-bottom:15px;padding-left:38px}
-  .term-row textarea{min-height:118px;font-size:16px;line-height:1.5}
-  .term-controls{width:100%}
+  .term-row{padding:10px !important;margin-bottom:12px}
+  .term-row textarea{min-height:120px;font-size:16px;line-height:1.5}
+  .term-controls{width:100%;justify-content:flex-start !important}
   .term-actions{width:100%;justify-content:flex-start;flex-wrap:wrap}
-  .term-order{flex-direction:row}
-  .term-move,.term-remove{flex:0 0 auto}
   .term-highlight{flex-wrap:wrap}
 }
 .items{overflow:auto}
@@ -1033,50 +1031,65 @@ function toggleTermsAuth(locked){
 }
 function addTerm(value="", highlight=false, highlightColor="#fff3a3", bold=false, italic=false, fontSize=null){
   const box=document.getElementById("termsList");
+  if(!box) return;
   const row=document.createElement("div");
   row.className="term-row";
+  row.style.cssText="display:flex;flex-direction:column;gap:10px;padding:12px;background:#f8fafc;border:1px solid #d9e0e8;border-radius:12px;margin-bottom:12px;";
   row.dataset.highlight=highlight ? "1" : "0";
   row.dataset.highlightColor=highlightColor;
   row.dataset.bold=bold ? "1" : "0";
   row.dataset.italic=italic ? "1" : "0";
   row.dataset.fontSize=String(Math.min(16,Math.max(7,parseInt(fontSize||getTermsFontSize(),10)||9)));
+
   const colors=[
     ["#ffd6d6","Red"],["#d9e8ff","Blue"],["#d9f7df","Green"],
     ["#eadcff","Purple"],["#f4dfc4","Orange"],["#ffdff0","Pink"],
     ["#d9f3f5","Cyan"],["#e6e6e6","Gray"]
   ];
-  const palette=colors.map(([hex,name])=>`<button type="button" class="term-color-option ${highlightColor===hex?"active":""}" data-color="${hex}" title="${name}" aria-label="${name}" onclick="setTermHighlightColor(this)"><span class="swatch" style="background:${hex}"></span></button>`).join("");
+  const palette=colors.map(([hex,name])=>
+    `<button type="button" class="term-color-option ${highlightColor===hex?"active":""}" data-color="${hex}" title="${name}" aria-label="${name}" onclick="setTermHighlightColor(this)"><span class="swatch" style="background:${hex}"></span></button>`
+  ).join("");
   const selectedName=(colors.find(x=>x[0]===highlightColor)||[highlightColor,"Color"])[1];
-  row.innerHTML=`<textarea class="term-input" rows="2" placeholder="Enter term & condition">${esc(value)}</textarea>
-                 <div class="term-controls">
-                   <div class="term-actions">
-                     <div class="term-order" title="Change term order">
-                       <button type="button" class="btn secondary term-move" title="Move this term up" aria-label="Move this term up" onclick="moveTerm(this,-1)">↑</button>
-                       <button type="button" class="btn secondary term-move" title="Move this term down" aria-label="Move this term down" onclick="moveTerm(this,1)">↓</button>
-                     </div>
-                     <div class="term-style-controls">
-                     <button type="button" class="btn secondary term-style-btn ${bold?"active":""}" onclick="toggleTermStyle(this,'bold')" title="Bold">B</button>
-                     <button type="button" class="btn secondary term-style-btn ${italic?"active":""}" onclick="toggleTermStyle(this,'italic')" title="Italic"><i>I</i></button>
-                     <button type="button" class="btn secondary term-style-btn" onclick="changeTermRowFontSize(this,-1)" title="Decrease font size">A−</button>
-                     <span class="term-size-label">${Math.min(16,Math.max(7,parseInt(fontSize||getTermsFontSize(),10)||9))} pt</span>
-                     <button type="button" class="btn secondary term-style-btn" onclick="changeTermRowFontSize(this,1)" title="Increase font size">A+</button>
-                   </div>
-                   <div class="term-highlight">
-                       <label style="display:flex;align-items:center;gap:5px;margin:0;font-size:12px;font-weight:700">
-                         <input type="checkbox" class="term-highlight-check" ${highlight?"checked":""} onchange="toggleTermHighlight(this)">
-                         <span>Highlight</span>
-                       </label>
-                       <div class="term-color-wrap">
-                         <button type="button" class="term-color-btn" onclick="toggleColorPalette(this)" title="Choose highlight color"><span class="swatch" style="background:${highlightColor}"></span><span class="color-name">${selectedName}</span></button>
-                         <div class="term-palette">${palette}</div>
-                       </div>
-                     </div>
-                     <button type="button" class="btn danger term-remove" onclick="removeTerm(this)">Remove</button>
-                   </div>
-                 </div>`;
+
+  row.innerHTML=`
+    <textarea class="term-input" rows="3" placeholder="Term & Condition likhein..."
+      style="width:100%;min-height:90px;resize:vertical;font:inherit;line-height:1.5;padding:11px 12px;border:1px solid #cfd7e2;border-radius:9px;background:#fff;box-sizing:border-box;"
+    >${esc(value)}</textarea>
+
+    <div class="term-controls" style="display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px;padding-top:9px;border-top:1px solid #e5e7eb;">
+      <div class="term-actions" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;min-width:0;">
+        <div class="term-style-controls" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+          <button type="button" class="btn secondary term-style-btn ${bold?"active":""}" onclick="toggleTermStyle(this,'bold')" title="Bold">B</button>
+          <button type="button" class="btn secondary term-style-btn ${italic?"active":""}" onclick="toggleTermStyle(this,'italic')" title="Italic"><i>I</i></button>
+          <button type="button" class="btn secondary term-style-btn" onclick="changeTermRowFontSize(this,-1)" title="Decrease font size">A−</button>
+          <span class="term-size-label">${Math.min(16,Math.max(7,parseInt(fontSize||getTermsFontSize(),10)||9))} pt</span>
+          <button type="button" class="btn secondary term-style-btn" onclick="changeTermRowFontSize(this,1)" title="Increase font size">A+</button>
+        </div>
+
+        <div class="term-highlight">
+          <label style="display:flex;align-items:center;gap:5px;margin:0;font-size:12px;font-weight:700">
+            <input type="checkbox" class="term-highlight-check" ${highlight?"checked":""} onchange="toggleTermHighlight(this)">
+            <span>Highlight</span>
+          </label>
+          <div class="term-color-wrap">
+            <button type="button" class="term-color-btn" onclick="toggleColorPalette(this)" title="Choose highlight color">
+              <span class="swatch" style="background:${highlightColor}"></span><span class="color-name">${selectedName}</span>
+            </button>
+            <div class="term-palette">${palette}</div>
+          </div>
+        </div>
+      </div>
+
+      <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-left:auto;">
+        <button type="button" class="btn secondary term-move" title="Move this term up" aria-label="Move this term up" onclick="moveTerm(this,-1)">↑</button>
+        <button type="button" class="btn secondary term-move" title="Move this term down" aria-label="Move this term down" onclick="moveTerm(this,1)">↓</button>
+        <button type="button" class="btn danger term-remove" onclick="removeTerm(this)">Remove</button>
+      </div>
+    </div>`;
   box.appendChild(row);
   refreshTermButtons();
 }
+
 function toggleTermStyle(btn,kind){
   const row=btn.closest(".term-row");
   const key=kind==='bold'?'bold':'italic';
