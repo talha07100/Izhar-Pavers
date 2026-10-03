@@ -271,12 +271,11 @@ body:has(.documents-portal.open) .saved-card{display:none}
 }
 #termsList .actual-term-textarea{
   display:block !important;
-  flex:1 1 auto !important;
-  width:calc(100% + 10px) !important;
+  width:100% !important;
   min-width:0 !important;
-  min-height:145px !important;
-  height:145px !important;
-  margin-left:-5px !important;
+  min-height:110px !important;
+  height:110px !important;
+  margin:0 !important;
   padding:12px !important;
   border:1px solid #cfd7e2 !important;
   border-radius:9px !important;
@@ -296,6 +295,17 @@ body:has(.documents-portal.open) .saved-card{display:none}
   padding-top:9px !important;
   border-top:1px solid #e5e7eb !important;
 }
+.term-history-btn{
+  min-width:38px !important;
+  height:32px !important;
+  padding:0 9px !important;
+  font-weight:800 !important;
+}
+.term-history-btn:disabled{
+  opacity:.45 !important;
+  cursor:not-allowed !important;
+}
+
 #termsList .actual-term-formatting{
   display:flex !important;
   flex-wrap:wrap !important;
@@ -312,8 +322,8 @@ body:has(.documents-portal.open) .saved-card{display:none}
   #termsList .actual-term-editor-row{padding:10px !important}
   #termsList .actual-term-writing-row{gap:8px !important}
   #termsList .actual-term-textarea{
-    min-height:145px !important;
-    height:145px !important;
+    min-height:110px !important;
+    height:110px !important;
     font-size:16px !important;
     line-height:1.5 !important;
   }
@@ -1198,13 +1208,10 @@ function addTerm(value="", highlight=false, highlightColor="#fff3a3", bold=false
   const selectedName=(colors.find(x=>x[0]===highlightColor)||[highlightColor,"Color"])[1];
 
   row.innerHTML=`
-    <div class="actual-term-writing-row">
-      <span class="actual-term-number">${[...document.querySelectorAll("#termsList .actual-term-editor-row")].length + 1}</span>
-      <textarea class="term-input actual-term-textarea" rows="8" placeholder="Term & Condition likhein...">${esc(value)}</textarea>
-    </div>
-
     <div class="actual-term-toolbar">
       <div class="actual-term-formatting">
+        <button type="button" class="btn secondary term-history-btn term-undo" onclick="undoTerm(this)" title="Undo" aria-label="Undo">↶</button>
+        <button type="button" class="btn secondary term-history-btn term-redo" onclick="redoTerm(this)" title="Redo" aria-label="Redo">↷</button>
         <button type="button" class="btn secondary term-style-btn ${bold?"active":""}" onclick="toggleTermStyle(this,'bold')" title="Bold">B</button>
         <button type="button" class="btn secondary term-style-btn ${italic?"active":""}" onclick="toggleTermStyle(this,'italic')" title="Italic"><i>I</i></button>
         <button type="button" class="btn secondary term-style-btn" onclick="changeTermRowFontSize(this,-1)" title="Decrease font size">A−</button>
@@ -1230,10 +1237,76 @@ function addTerm(value="", highlight=false, highlightColor="#fff3a3", bold=false
         <button type="button" class="btn secondary term-move" onclick="moveTerm(this,1)" title="Move down">↓</button>
         <button type="button" class="btn danger term-remove" onclick="removeTerm(this)">Remove</button>
       </div>
+    </div>
+
+    <div class="actual-term-writing-row">
+      <span class="actual-term-number">${[...document.querySelectorAll("#termsList .actual-term-editor-row")].length + 1}</span>
+      <textarea class="term-input actual-term-textarea" rows="5" placeholder="Enter Term & Condition...">${esc(value)}</textarea>
     </div>`;
 
   box.appendChild(row);
+  const ta=row.querySelector('.actual-term-textarea');
+  initTermHistory(ta);
   refreshTermButtons();
+}
+
+const termHistory = new WeakMap();
+
+function initTermHistory(textarea){
+  if(!textarea) return;
+  termHistory.set(textarea,{past:[],future:[]});
+  textarea.addEventListener('input',()=>{
+    const h=termHistory.get(textarea);
+    if(!h) return;
+    const current=textarea.value;
+    const previous=h.lastValue ?? '';
+    if(current!==previous){
+      h.past.push(previous);
+      if(h.past.length>50) h.past.shift();
+      h.future=[];
+      h.lastValue=current;
+      updateTermHistoryButtons(textarea);
+    }
+  });
+  const h=termHistory.get(textarea);
+  h.lastValue=textarea.value;
+  updateTermHistoryButtons(textarea);
+}
+
+function updateTermHistoryButtons(textarea){
+  const row=textarea?.closest('.term-row');
+  const h=textarea ? termHistory.get(textarea) : null;
+  if(!row || !h) return;
+  const u=row.querySelector('.term-undo');
+  const r=row.querySelector('.term-redo');
+  if(u) u.disabled=h.past.length===0;
+  if(r) r.disabled=h.future.length===0;
+}
+
+function undoTerm(btn){
+  const row=btn.closest('.term-row');
+  const ta=row?.querySelector('.actual-term-textarea');
+  const h=ta ? termHistory.get(ta) : null;
+  if(!ta || !h || !h.past.length) return;
+  h.future.push(ta.value);
+  ta.value=h.past.pop();
+  h.lastValue=ta.value;
+  ta.dispatchEvent(new Event('input',{bubbles:true}));
+  updateTermHistoryButtons(ta);
+  ta.focus();
+}
+
+function redoTerm(btn){
+  const row=btn.closest('.term-row');
+  const ta=row?.querySelector('.actual-term-textarea');
+  const h=ta ? termHistory.get(ta) : null;
+  if(!ta || !h || !h.future.length) return;
+  h.past.push(ta.value);
+  ta.value=h.future.pop();
+  h.lastValue=ta.value;
+  ta.dispatchEvent(new Event('input',{bubbles:true}));
+  updateTermHistoryButtons(ta);
+  ta.focus();
 }
 
 function toggleTermStyle(btn,kind){
