@@ -3,62 +3,45 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    function authDoc() {
-      return /databases/$(database)/documents/appConfig/authorization;
-    }
-
-    function hasAuthConfig() {
-      return exists(authDoc());
-    }
-
     function signedIn() {
       return request.auth != null;
     }
 
-    function isBootstrapOwner() {
+    function bootstrapOwner() {
       return signedIn()
         && request.auth.token.email == 'talhakhan14746@gmail.com';
     }
 
-    function isCurrentAdmin() {
+    function existingAdmin() {
       return signedIn()
-        && hasAuthConfig()
-        && (
-          (
-            get(authDoc()).data.adminEmails is list
-            && request.auth.token.email in get(authDoc()).data.adminEmails
-          )
-          || request.auth.token.email == get(authDoc()).data.ownerEmail
-        );
-    }
-
-    function appAccessAllowed() {
-      return signedIn()
-        && (
-          !hasAuthConfig()
-          || isCurrentAdmin()
-          || get(authDoc()).data.enabled != true
-          || request.auth.token.email in get(authDoc()).data.authorizedEmails
-        );
+        && exists(/databases/$(database)/documents/appConfig/authorization)
+        && request.auth.token.email in get(/databases/$(database)/documents/appConfig/authorization).data.adminEmails;
     }
 
     match /appConfig/authorization {
       allow read: if signedIn();
 
-      // First-time creation is restricted to the bootstrap owner.
-      allow create: if isBootstrapOwner() && !hasAuthConfig();
+      // The first authorization document can only be created by the Owner.
+      allow create: if bootstrapOwner()
+        && request.resource.data.ownerEmail == 'talhakhan14746@gmail.com'
+        && request.resource.data.adminEmails.size() >= 1
+        && request.resource.data.adminEmails.size() <= 4
+        && request.resource.data.adminEmails.hasAll(['talhakhan14746@gmail.com']);
 
-      // All configured Admins may manage Admins, authorization and Terms Lock.
-      allow update: if isCurrentAdmin();
+      // Existing Admins may manage the Admin list and authorization list.
+      // The Owner email itself cannot be changed or removed.
+      allow update: if (bootstrapOwner() || existingAdmin())
+        && request.resource.data.ownerEmail == resource.data.ownerEmail
+        && request.resource.data.adminEmails.size() >= 1
+        && request.resource.data.adminEmails.size() <= 4
+        && request.resource.data.adminEmails.hasAll([resource.data.ownerEmail]);
 
       allow delete: if false;
     }
 
     match /users/{userId}/{document=**} {
       allow read, write:
-        if signedIn()
-        && request.auth.uid == userId
-        && appAccessAllowed();
+        if signedIn() && request.auth.uid == userId;
     }
   }
 }
