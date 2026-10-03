@@ -55,6 +55,12 @@ table{width:100%;border-collapse:collapse;min-width:720px}
 th,td{border:1px solid #ccd2da;padding:7px}
 th{background:#f5f7fa;font-size:13px}
 td input{border:0;padding:5px;border-radius:0}
+#rows td input{
+  width:100% !important;
+  min-width:0 !important;
+  box-sizing:border-box !important;
+  display:block !important;
+}
 .btn{border:0;border-radius:8px;padding:11px 16px;font-weight:700;cursor:pointer}
 .primary{background:#0b2d69;color:white}
 .secondary{background:#e9edf3}
@@ -193,7 +199,7 @@ body:has(.documents-portal.open) .saved-card{display:none}
 .master-terms-editor-list{display:grid;gap:10px}
 .master-term-box{display:flex;align-items:flex-start;gap:10px;background:#f8fafc;border:1px solid #d9e0e8;border-radius:12px;padding:10px}
 .master-term-number{width:32px;height:32px;min-width:32px;border-radius:9px;background:#14213d;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px;margin-top:1px}
-.master-term-input{flex:1;min-width:0;min-height:58px;border:1px solid #cfd7e2;border-radius:9px;padding:9px 10px;font:inherit;resize:vertical;background:#fff}
+.master-term-input{flex:1;min-width:0;min-height:200px;border:1px solid #cfd7e2;border-radius:9px;padding:9px 10px;font:inherit;resize:vertical;background:#fff;box-sizing:border-box;width:100%}
 .master-term-delete{min-width:34px;height:34px;padding:0;border-radius:9px}
 .term-row{position:relative;padding-left:42px}.term-style-controls{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:7px}.term-style-btn{min-width:34px;height:32px;padding:0 8px;border-radius:8px}.term-style-btn.active{background:#14213d;color:#fff;border-color:#14213d}.term-size-label{font-size:12px;font-weight:700;color:#596273;min-width:44px;text-align:center}
 .term-row::before{content:counter(terms);counter-increment:terms;position:absolute;left:0;top:2px;width:32px;height:32px;border-radius:9px;background:#14213d;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px}
@@ -267,7 +273,7 @@ body:has(.documents-portal.open) .saved-card{display:none}
   flex:1 1 auto !important;
   width:100% !important;
   min-width:0 !important;
-  min-height:100px !important;
+  min-height:200px !important;
   height:auto !important;
   padding:12px !important;
   border:1px solid #cfd7e2 !important;
@@ -304,7 +310,7 @@ body:has(.documents-portal.open) .saved-card{display:none}
   #termsList .actual-term-editor-row{padding:10px !important}
   #termsList .actual-term-writing-row{gap:8px !important}
   #termsList .actual-term-textarea{
-    min-height:120px !important;
+    min-height:200px !important;
     font-size:16px !important;
     line-height:1.5 !important;
   }
@@ -466,6 +472,19 @@ body:has(.documents-portal.open) .saved-card{display:none}
 <h3 style="margin-top:0">Terms &amp; Conditions</h3>
 <p class="sub" style="margin-bottom:10px">Manage the default Terms &amp; Conditions. These terms will be applied automatically to newly created documents.</p>
 <div class="master-terms-editor-list" id="masterTermsEditorList"></div>
+<div id="termsAuthControl" class="card" style="margin-top:12px;background:#f8fafc">
+  <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
+    <div>
+      <h4 style="margin:0 0 4px">Lock Terms &amp; Conditions Editing</h4>
+      <p class="hint" style="margin:0">Turn ON to prevent users from changing, formatting or reordering terms.</p>
+    </div>
+    <label style="display:flex;align-items:center;gap:8px;font-weight:700">
+      <input type="checkbox" id="termsAuthToggle" onchange="toggleTermsAuth(this.checked)">
+      <span>Lock Editing</span>
+    </label>
+  </div>
+</div>
+
 <div class="card" style="margin-top:12px;background:#f8fafc">
 <h4 style="margin:0 0 8px">Terms &amp; Conditions Text Size</h4>
 <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
@@ -1017,7 +1036,7 @@ function addMasterTermBox(value=""){
   row.dataset.italic=t.italic?"1":"0";
   row.dataset.fontSize=String(t.fontSize);
   row.innerHTML=`<div class="master-term-number"></div>
-    <textarea class="master-term-input" rows="2" placeholder="Enter Terms & Conditions">${esc(t.text)}</textarea>
+    <textarea class="master-term-input" rows="8" placeholder="Enter Terms & Conditions">${esc(t.text)}</textarea>
     <div class="term-style-controls" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
       <button type="button" class="btn secondary term-master-bold ${t.bold?"active":""}" onclick="toggleMasterTermStyle(this,'bold')" title="Bold">B</button>
       <button type="button" class="btn secondary term-master-italic ${t.italic?"active":""}" onclick="toggleMasterTermStyle(this,'italic')" title="Italic"><i>I</i></button>
@@ -1070,6 +1089,7 @@ function setMasterTermColor(input){
   row.dataset.highlight="1";
 }
 function moveMasterTerm(btn,direction){
+  if(isTermsAuthLocked()) return;
   const row=btn.closest(".master-term-box");
   const box=document.getElementById("masterTermsEditorList");
   if(direction<0 && row.previousElementSibling) box.insertBefore(row,row.previousElementSibling);
@@ -1077,6 +1097,7 @@ function moveMasterTerm(btn,direction){
   refreshMasterTermNumbers();
 }
 function saveMasterTerms(){
+  if(isTermsAuthLocked()) return;
   const rows=[...document.querySelectorAll("#masterTermsEditorList .master-term-box")];
   const terms=rows.map(row=>({
     text:row.querySelector(".master-term-input")?.value.trim()||"",
@@ -1099,12 +1120,25 @@ function saveMasterTerms(){
   }
   const st=document.getElementById("termsSettingsStatus"); if(st) st.textContent="Terms & Conditions saved.";
 }
-// Terms & Conditions are intentionally unrestricted.
-// These compatibility functions remain because older saved UI code may call them,
-// but they never disable editing, formatting, adding, deleting or reordering.
-function isTermsAuthLocked(){ return false; }
-function applyTermsAuthLock(){ return; }
-function toggleTermsAuth(locked){ return; }
+function isTermsAuthLocked(){
+  return localStorage.getItem("termsAuthLocked")==="true";
+}
+function applyTermsAuthLock(){
+  const locked=isTermsAuthLocked();
+  const toggle=document.getElementById("termsAuthToggle");
+  if(toggle) toggle.checked=locked;
+  document.querySelectorAll("#masterTermsEditorList textarea,#masterTermsEditorList button,#masterTermsEditorList input").forEach(el=>{
+    el.disabled=locked;
+  });
+  const add=document.querySelector('#termsSettingsCard button[onclick="addMasterTermBox()"]');
+  const save=document.querySelector('#termsSettingsCard button[onclick="saveMasterTerms()"]');
+  if(add) add.disabled=locked;
+  if(save) save.disabled=locked;
+}
+function toggleTermsAuth(locked){
+  localStorage.setItem("termsAuthLocked",locked?"true":"false");
+  applyTermsAuthLock();
+}
 function addTerm(value="", highlight=false, highlightColor="#fff3a3", bold=false, italic=false, fontSize=null){
   const box=document.getElementById("termsList");
   if(!box) return;
@@ -1130,7 +1164,7 @@ function addTerm(value="", highlight=false, highlightColor="#fff3a3", bold=false
   row.innerHTML=`
     <div class="actual-term-writing-row">
       <span class="actual-term-number">${[...document.querySelectorAll("#termsList .actual-term-editor-row")].length + 1}</span>
-      <textarea class="term-input actual-term-textarea" rows="3" placeholder="Term & Condition likhein...">${esc(value)}</textarea>
+      <textarea class="term-input actual-term-textarea" rows="8" placeholder="Term & Condition likhein...">${esc(value)}</textarea>
     </div>
 
     <div class="actual-term-toolbar">
@@ -2200,7 +2234,7 @@ const FIREBASE_CONFIG_KEY="izhar_pavers_firebase_config_v1";
 const CLOUD_SYNC_KEYS=["izhar_pavers_saved_documents_v1","izhar_pavers_recycle_bin_v1","izhar_pavers_materials_v1","izhar_pavers_profile_settings_v1","izhar_pavers_default_terms_v1","izhar_pavers_reference_settings_v1","izhar_pavers_terms_font_size_v1"];
 let cloudApp=null, cloudAuth=null, cloudDb=null, cloudUser=null, syncTimer=null, cloudReady=false, firebaseInitPromise=null, authProcessingUid=null;
 const BOOTSTRAP_OWNER_EMAIL="talhakhan14746@gmail.com";
-let authorizationConfig={ownerEmail:BOOTSTRAP_OWNER_EMAIL,enabled:false,authorizedEmails:[BOOTSTRAP_OWNER_EMAIL],adminEmails:[BOOTSTRAP_OWNER_EMAIL]};
+let authorizationConfig={ownerEmail:BOOTSTRAP_OWNER_EMAIL,enabled:false,authorizedEmails:[BOOTSTRAP_OWNER_EMAIL]};
 let authorizationChecked=false;
 
 const FIREBASE_DEFAULT_CONFIG={
@@ -2359,30 +2393,25 @@ function openAuthorizationSettings(){
 window.openAuthorizationSettings=openAuthorizationSettings;
 async function saveAuthorizationConfig(){
   if(!isAdminAccount()) throw new Error("Only an Admin can change authorization settings.");
-  if(!cloudDb) throw new Error("Firebase/Firestore is not connected. Please check the internet connection and Firebase configuration.");
   const currentOwner=getCurrentOwnerEmail();
-  const adminEmails=[...new Set([currentOwner,...(authorizationConfig.adminEmails||[]).map(normalizeEmail).filter(Boolean)])].slice(0,4);
-  const authorizedEmails=[...new Set([currentOwner,...(authorizationConfig.authorizedEmails||[]).map(normalizeEmail).filter(Boolean)])];
-  const nextConfig={
+  const adminEmails=getAdminEmails();
+  const updatedAt=new Date().toISOString();
+  authorizationConfig={
     ownerEmail:currentOwner,
     enabled:authorizationConfig.enabled===true,
-    authorizedEmails,
-    adminEmails,
-    updatedAt:new Date().toISOString()
+    authorizedEmails:[...new Set([currentOwner,...(authorizationConfig.authorizedEmails||[]).map(normalizeEmail).filter(Boolean)])],
+    adminEmails:[...new Set([currentOwner,...adminEmails])].slice(0,4),
+    updatedAt
   };
-  const payload={ownerEmail:nextConfig.ownerEmail,enabled:nextConfig.enabled,authorizedEmails:nextConfig.authorizedEmails,adminEmails:nextConfig.adminEmails,updatedAt:nextConfig.updatedAt};
-  if(!navigator.onLine) throw new Error("Your device is offline. Connect to the internet and try again.");
-  // Firestore must acknowledge the authoritative authorization change first.
-  // Only after a successful cloud write do we update local caches. This prevents
-  // a failed/timeout write from making the device show a change that was never saved.
-  await withTimeout(setDoc(doc(cloudDb,"appConfig","authorization"),payload,{merge:true}),12000,"Authorization cloud save");
-  authorizationConfig=nextConfig;
   localStorage.setItem("izhar_pavers_authorization_config_v1",JSON.stringify(authorizationConfig));
   mirrorAuthorizationLocalStorage();
   renderAuthorizationUI();
+  if(!cloudDb) throw new Error("Cloud connection is not ready. The setting is saved locally and will sync when Firebase reconnects.");
+  const ref=doc(cloudDb,"appConfig","authorization");
+  const payload={ownerEmail:authorizationConfig.ownerEmail,enabled:authorizationConfig.enabled,authorizedEmails:authorizationConfig.authorizedEmails,adminEmails:authorizationConfig.adminEmails,updatedAt};
+  await withTimeout(setDoc(ref,payload,{merge:true}),8000,"Authorization cloud save");
   return true;
 }
-
 async function retrySaveAuthorizationConfig(){
   if(!isAdminAccount() || !cloudDb) return;
   try{ await saveAuthorizationConfig(); }catch(e){ console.warn("Authorization cloud retry failed:",e); }
@@ -2465,17 +2494,13 @@ async function checkUserAuthorization(user){
 }
 window.setAuthorizationEnabled=async function(enabled){
   if(!isOwnerAccount())return;
-  const before=authorizationConfig.enabled===true;
   authorizationConfig.enabled=!!enabled;
+  authorizationConfig.updatedAt=new Date().toISOString();
+  localStorage.setItem("izhar_pavers_authorization_config_v1",JSON.stringify(authorizationConfig));
+  mirrorAuthorizationLocalStorage();
   renderAuthorizationUI();
-  try{
-    await saveAuthorizationConfig();
-    setCloudMessage(enabled?"Authorization is ON. Only approved Gmail accounts can use the app.":"Authorization is OFF. Any Google account can use the app.");
-  }catch(e){
-    authorizationConfig.enabled=before;
-    renderAuthorizationUI();
-    setCloudMessage("Authorization was not saved: "+(e?.message||e));
-  }
+  try{ await saveAuthorizationConfig(); setCloudMessage(enabled?"Authorization is ON. Only approved Gmail accounts can use the app.":"Authorization is OFF. Any Google account can use the app."); }
+  catch(e){ setCloudMessage("Authorization saved on this device. Cloud save is pending: "+e.message); }
 };
 window.addAuthorizedEmail=async function(){
   if(!isAdminAccount())return;
@@ -2489,29 +2514,17 @@ window.addAuthorizedEmail=async function(){
   const toAdd=emails.filter(email=>email!==getCurrentOwnerEmail() && !before.includes(email));
   if(!toAdd.length){ if(input) input.value=""; setCloudMessage("All entered Gmail accounts are already authorized or are the current owner."); renderAuthorizationUI(); return; }
   authorizationConfig.authorizedEmails=[...new Set([...before,...toAdd])];
-  try{
-    await saveAuthorizationConfig();
-    if(input)input.value="";
-    setCloudMessage(toAdd.length===1?toAdd[0]+" has been authorized.":toAdd.length+" Gmail accounts have been authorized.");
-  }catch(e){
-    authorizationConfig.authorizedEmails=before;
-    renderAuthorizationUI();
-    setCloudMessage("Authorization was not saved: "+(e?.message||e));
-  }
+  mirrorAuthorizationLocalStorage(); renderAuthorizationUI();
+  try{ await saveAuthorizationConfig(); if(input)input.value=""; setCloudMessage(toAdd.length===1?toAdd[0]+" has been authorized.":toAdd.length+" Gmail accounts have been authorized."); }
+  catch(e){ renderAuthorizationUI(); setCloudMessage(toAdd.join(", ")+" saved locally. Cloud save is pending: "+e.message); }
 };
 window.removeAuthorizedEmail=async function(email){
   if(!isAdminAccount()||email===getCurrentOwnerEmail())return;
   if(!confirm("Remove authorization for "+email+"?"))return;
-  const before=[...(authorizationConfig.authorizedEmails||[])];
-  authorizationConfig.authorizedEmails=before.filter(x=>normalizeEmail(x)!==normalizeEmail(email));
-  try{
-    await saveAuthorizationConfig();
-    setCloudMessage(email+" authorization removed.");
-  }catch(e){
-    authorizationConfig.authorizedEmails=before;
-    renderAuthorizationUI();
-    setCloudMessage("Authorization was not removed: "+(e?.message||e));
-  }
+  authorizationConfig.authorizedEmails=authorizationConfig.authorizedEmails.filter(x=>normalizeEmail(x)!==normalizeEmail(email));
+  mirrorAuthorizationLocalStorage(); renderAuthorizationUI();
+  try{ await saveAuthorizationConfig(); setCloudMessage(email+" authorization removed."); }
+  catch(e){ renderAuthorizationUI(); setCloudMessage(email+" removed on this device. Cloud save is pending: "+e.message); }
 };
 window.addAdmin=async function(){
   if(!isOwnerAccount()){alert("Only the Owner can add or remove Admins.");return;}
@@ -2523,17 +2536,15 @@ window.addAdmin=async function(){
   if(email===getCurrentOwnerEmail()){alert("This Gmail is already the Owner.");return;}
   if(admins.includes(email)){alert("This Gmail is already an Admin.");return;}
   if(admins.length>=4){alert("Maximum 4 Admins are allowed. Remove an Admin first.");return;}
-  const beforeAdmins=[...admins];
-  const beforeAuthorized=[...(authorizationConfig.authorizedEmails||[])];
+  const before=[...admins];
   authorizationConfig.adminEmails=[...admins,email];
-  authorizationConfig.authorizedEmails=[...new Set([...beforeAuthorized,email])];
+  authorizationConfig.authorizedEmails=[...new Set([...(authorizationConfig.authorizedEmails||[]),email])];
   try{
     await saveAuthorizationConfig();
     if(input)input.value="";
     setCloudMessage(email+" is now an Admin and has been authorized.");
   }catch(e){
-    authorizationConfig.adminEmails=beforeAdmins;
-    authorizationConfig.authorizedEmails=beforeAuthorized;
+    authorizationConfig.adminEmails=before;
     renderAuthorizationUI();
     alert("Admin could not be saved: "+(e?.message||e));
   }
@@ -2572,7 +2583,7 @@ window.transferAdminOwnership=async function(){
   const nextAuthorized=[...new Set([...(authorizationConfig.authorizedEmails||[]).map(normalizeEmail).filter(Boolean),oldOwner,newOwner])];
   const nextConfig={ownerEmail:newOwner,enabled:!!authorizationConfig.enabled,authorizedEmails:nextAuthorized,adminEmails:nextAdmins,updatedAt:new Date().toISOString(),previousOwnerEmail:oldOwner};
   try{
-    await withTimeout(setDoc(doc(cloudDb,"appConfig","authorization"),nextConfig,{merge:true}),8000,"Ownership transfer");
+    await withTimeout(setDoc(doc(cloudDb,"appConfig","authorization"),nextConfig,{merge:true}),20000,"Ownership transfer");
     authorizationConfig=nextConfig;
     localStorage.setItem("izhar_pavers_authorization_config_v1",JSON.stringify(nextConfig));
     mirrorAuthorizationLocalStorage();

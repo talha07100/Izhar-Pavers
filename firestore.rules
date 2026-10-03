@@ -7,76 +7,77 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    function authDoc() {
-      return /databases/$(database)/documents/appConfig/authorization;
-    }
-
-    function hasAuthConfig() {
-      return exists(authDoc());
-    }
-
-    function isBootstrapOwner() {
+    function bootstrapOwner() {
       return signedIn()
         && request.auth.token.email == 'talhakhan14746@gmail.com';
     }
 
-    function isAdmin() {
-      return signedIn()
-        && hasAuthConfig()
-        && (
-          request.auth.token.email == get(authDoc()).data.ownerEmail
-          ||
-          (
-            get(authDoc()).data.adminEmails is list
-            && request.auth.token.email in get(authDoc()).data.adminEmails
-          )
-        );
+    function authDoc() {
+      return get(/databases/$(database)/documents/appConfig/authorization);
     }
 
-    function appAccessAllowed() {
+    function currentOwner() {
       return signedIn()
-        && (
-          !hasAuthConfig()
-          || isAdmin()
-          || get(authDoc()).data.enabled != true
-          || request.auth.token.email in get(authDoc()).data.authorizedEmails
-        );
+        && exists(/databases/$(database)/documents/appConfig/authorization)
+        && request.auth.token.email == authDoc().data.ownerEmail;
     }
 
-    // ==============================
-    // ADMIN / AUTHORIZATION
-    // ==============================
+    function currentAdmin() {
+      return signedIn()
+        && exists(/databases/$(database)/documents/appConfig/authorization)
+        && 'adminEmails' in authDoc().data
+        && request.auth.token.email in authDoc().data.adminEmails;
+    }
+
+    function validAdminList(data) {
+      return 'ownerEmail' in data
+        && 'adminEmails' in data
+        && data.adminEmails.size() >= 1
+        && data.adminEmails.size() <= 4
+        && data.adminEmails.hasAll([data.ownerEmail]);
+    }
+
     match /appConfig/authorization {
       allow read: if signedIn();
 
-      // First creation can only be performed by the permanent bootstrap Owner.
-      allow create: if isBootstrapOwner() && !hasAuthConfig();
+      // First-time creation / recovery by the permanent bootstrap Owner.
+      allow create: if bootstrapOwner()
+        && request.resource.data.ownerEmail == 'talhakhan14746@gmail.com'
+        && validAdminList(request.resource.data);
 
-      // Existing Owner/Admin can update authorization and admin list.
-      allow update: if isAdmin();
+      // The bootstrap Owner can also repair/migrate an old authorization
+      // document that does not yet contain the new adminEmails structure.
+      // Ownership transfer is still handled separately below.
+      allow update: if bootstrapOwner()
+        && request.resource.data.ownerEmail == 'talhakhan14746@gmail.com'
+        && validAdminList(request.resource.data);
 
-      // Authorization config must never be deleted.
+      // Existing Owner/Admin accounts may update authorization/admin data.
+      // The Owner is the only account allowed to change the ownerEmail.
+      allow update: if currentAdmin()
+        && validAdminList(request.resource.data)
+        && (
+          (
+            request.resource.data.ownerEmail == resource.data.ownerEmail
+            && (
+              currentOwner()
+              || request.resource.data.adminEmails == resource.data.adminEmails
+            )
+          )
+          ||
+          (
+            currentOwner()
+            && request.resource.data.ownerEmail != resource.data.ownerEmail
+            && request.resource.data.ownerEmail in request.resource.data.adminEmails
+            && request.resource.data.authorizedEmails.hasAll([request.resource.data.ownerEmail])
+          )
+        );
+
       allow delete: if false;
     }
 
-    // ==============================
-    // TERMS & CONDITIONS
-    // ==============================
-    // There is NO Terms Lock. Any signed-in app user may read/write Terms.
-    // This matches the application requirement that Terms editing has no
-    // Owner/Admin restriction.
-    match /appConfig/terms {
-      allow read, create, update, delete: if signedIn();
-    }
-
-    // ==============================
-    // USER DATA
-    // ==============================
     match /users/{userId}/{document=**} {
-      allow read, write:
-        if signedIn()
-        && request.auth.uid == userId
-        && appAccessAllowed();
+      allow read, write: if signedIn() && request.auth.uid == userId;
     }
   }
 }
