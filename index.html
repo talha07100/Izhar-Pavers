@@ -1327,9 +1327,8 @@ function saveMasterTerms(){
     const st=document.getElementById("termsSettingsStatus"); if(st) st.textContent="Please enter at least one term.";
     return;
   }
-  // Save ONLY as the default Terms template for FUTURE New Files.
-  // Never replace Terms inside the document currently being edited.
   localStorage.setItem(DEFAULT_TERMS_KEY,JSON.stringify(terms));
+  // Settings Terms are a DEFAULT TEMPLATE only. Never modify the currently open document.
   const st=document.getElementById("termsSettingsStatus"); if(st) st.textContent="Terms & Conditions saved for new files.";
   updateTermsHistoryButtons();
 }
@@ -1677,10 +1676,8 @@ function currentDocumentData(){
       rows:getPaymentData()
     },
     terms:getTermData(),
-    // Freeze the exact Profile / Signature / Stamp used by this document.
-    savedProfile:activeDocumentProfileSnapshot
-      ? JSON.parse(JSON.stringify(activeDocumentProfileSnapshot))
-      : JSON.parse(JSON.stringify(getProfileSettings())),
+    // Freeze the profile/signature/stamp used when this document is saved.
+    savedProfile:JSON.parse(JSON.stringify(activeDocumentProfileSnapshot || getProfileSettings())),
     savedAt:new Date().toISOString()
   };
 }
@@ -1722,14 +1719,6 @@ function saveCurrentDocument(silent=false){
   }
   return doc;
 }
-function resetDocumentTermsToDefaultTemplate(){
-  const termsBox=document.getElementById("termsList");
-  if(!termsBox) return;
-  termsBox.innerHTML="";
-  getMasterTermData().forEach(t=>addTerm(t.text,t.highlight,t.highlightColor,t.bold,t.italic,t.fontSize));
-  applyTermsAuthLock();
-}
-
 function newDocument(){
   toggleMobileMenu(false);
   if(window.requireCloudLogin && !window.requireCloudLogin()) return false;
@@ -1755,8 +1744,14 @@ function newDocument(){
   if(typeof updatePaymentVisibility==='function') updatePaymentVisibility();
   if(typeof updatePaymentSummary==='function') updatePaymentSummary();
   if(typeof updateReferencePreview==='function') updateReferencePreview();
-  // Always clear the previous document Terms and load ONLY the current Settings default template.
-  resetDocumentTermsToDefaultTemplate();
+  if(typeof addTerm==='function'){
+    const termsBox=document.getElementById("termsList");
+    if(termsBox){
+      termsBox.innerHTML="";
+      getMasterTermData().forEach(t=>addTerm(t.text,t.highlight,t.highlightColor,t.bold,t.italic,t.fontSize));
+      applyTermsAuthLock();
+    }
+  }
   const status=document.getElementById("status"); if(status) status.textContent="New file ready — reference will be generated automatically on Save / PDF.";
 }
 
@@ -1829,11 +1824,7 @@ async function downloadSavedDocument(id){
 function applySavedDocumentToForm(doc, closePortal=true){
   if(!doc)return;
   currentEditingDocumentId=doc.id||null;
-  // Restore this document's own Profile / Signature / Stamp snapshot.
-  // Legacy documents without a snapshot use the current Settings profile once.
-  activeDocumentProfileSnapshot=doc.savedProfile
-    ? JSON.parse(JSON.stringify(doc.savedProfile))
-    : JSON.parse(JSON.stringify(getProfileSettings()));
+  activeDocumentProfileSnapshot=doc.savedProfile ? JSON.parse(JSON.stringify(doc.savedProfile)) : JSON.parse(JSON.stringify(getProfileSettings()));
   if(closePortal) closeSavedFolder();
   document.getElementById("ref").value=doc.ref||"";
   const customRefEl=document.getElementById("customRef"); if(customRefEl) customRefEl.value=doc.customRef||"";
@@ -1858,7 +1849,7 @@ function applySavedDocumentToForm(doc, closePortal=true){
   if(doc.payment?.showDetails && !(doc.payment?.rows||[]).length) togglePaymentDetails();
   const termsBox=document.getElementById("termsList"); termsBox.innerHTML="";
   (doc.terms||[]).forEach(x=>addTerm(x.text,x.highlight,x.highlightColor,x.bold,x.italic,x.fontSize));
-  if(!termsBox.children.length) getMasterTermData().forEach(t=>addTerm(t.text,t.highlight,t.highlightColor,t.bold,t.italic,t.fontSize));
+  if(!termsBox.children.length) getMasterTerms().forEach(t=>addTerm(t));
   updateAmounts(); updatePaymentSummary();
   if(closePortal){
     document.getElementById("status").textContent="Loaded for editing: "+doc.ref;
