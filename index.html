@@ -2079,6 +2079,11 @@ function restoreAuthorizationLocalStorage(){
     }
   }catch(e){}
 }
+function escapeHtml(value){
+  return String(value ?? "").replace(/[&<>"']/g, function(ch){
+    return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[ch];
+  });
+}
 function renderAuthorizationList(){
   const list=document.getElementById("authorizationList");
   if(!list || !isOwnerAccount()) return;
@@ -2087,9 +2092,17 @@ function renderAuthorizationList(){
   list.innerHTML=emails.map(email=>{
     const safe=escapeHtml(email);
     const encoded=encodeURIComponent(email);
-    return `<div class="auth-item"><span>${safe}${email===owner?' <strong>(Admin)</strong>':''}</span>${email===owner?'':'<button type="button" onclick="removeAuthorizedEmail(decodeURIComponent(\''+encoded+'\'))">Delete</button>'}</div>`;
+    return `<div class="auth-item"><span>${safe}${email===owner?' <strong>(Admin)</strong>':''}</span>${email===owner?'':'<button type="button" onclick="removeAuthorizedEmail(decodeURIComponent(\''+encoded+'\'))">Remove</button>'}</div>`;
   }).join("");
 }
+window.renderApprovedGmails = function(gmailsArray){
+  authorizationConfig.authorizedEmails = Array.isArray(gmailsArray)
+    ? gmailsArray.map(normalizeEmail).filter(Boolean)
+    : [];
+  mirrorAuthorizationLocalStorage();
+  renderAuthorizationList();
+};
+
 function renderAuthorizationUI(){
   const card=document.getElementById("authorizationCard");
   const ownership=document.getElementById("ownershipCard");
