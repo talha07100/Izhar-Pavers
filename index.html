@@ -317,11 +317,14 @@ body:has(.documents-portal.open) .saved-card{display:none}
 </style>
 </head>
 <body>
-<div id="installBanner" role="status" aria-label="Install Izhar Pavers app">
-  <div><strong>Install Izhar Pavers App</strong><span>Install this app on your device for quick access.</span></div>
-  <div style="display:flex;align-items:center;gap:8px">
-    <button id="installAppBtn" type="button">Install App</button>
-    <button id="dismissInstallBannerBtn" class="install-banner-dismiss" type="button" aria-label="Dismiss install banner" title="Dismiss">✕</button>
+<div id="pwa-install-banner" style="display:none;position:fixed;top:0;left:0;width:100%;background:#1a1a1a;color:#fff;padding:10px 15px;box-sizing:border-box;z-index:9999;align-items:center;justify-content:space-between;font-family:sans-serif;box-shadow:0 2px 10px rgba(0,0,0,.3);">
+  <div style="display:flex;align-items:center;gap:10px;min-width:0;">
+    <img src="icons/icon-192.png" alt="App Icon" style="width:36px;height:36px;border-radius:8px;flex:none;">
+    <span style="font-size:13px;font-weight:600;">Install App for better experience</span>
+  </div>
+  <div style="display:flex;align-items:center;gap:8px;flex:none;">
+    <button id="pwa-install-btn" type="button" style="background:#d4af37;color:#000;border:none;padding:6px 12px;border-radius:6px;font-size:12px;font-weight:bold;cursor:pointer;">Install</button>
+    <button id="pwa-close-btn" type="button" aria-label="Close" style="background:transparent;color:#fff;border:none;font-size:16px;cursor:pointer;padding:0 4px;">✕</button>
   </div>
 </div>
 <button aria-label="Open menu" class="mobile-menu-btn" onclick="toggleMobileMenu(true)" title="Menu" type="button"><span></span><span></span><span></span></button>
@@ -2751,41 +2754,45 @@ if("serviceWorker" in navigator && (location.protocol==="https:" || location.hos
 // Install App banner: keep install action in the banner only, not in the app menu.
 let deferredInstallPrompt=null;
 function setupInstallBanner(){
-  const banner=document.getElementById("installBanner");
-  const btn=document.getElementById("installAppBtn");
-  const dismiss=document.getElementById("dismissInstallBannerBtn");
-  if(!banner||!btn) return;
-  banner.style.display="none";
+  const installBanner=document.getElementById("pwa-install-banner");
+  const installBtn=document.getElementById("pwa-install-btn");
+  const closeBtn=document.getElementById("pwa-close-btn");
+  if(!installBanner||!installBtn||!closeBtn) return;
 
-  if(dismiss){
-    dismiss.addEventListener("click",()=>{
-      banner.style.display="none";
-      localStorage.setItem("installBannerDismissed","true");
-    });
+  let deferredPrompt=null;
+
+  function isMobileDevice(){
+    return /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
   }
 
   window.addEventListener("beforeinstallprompt",event=>{
     event.preventDefault();
-    deferredInstallPrompt=event;
-    if(localStorage.getItem("installBannerDismissed")!=="true"){
-      banner.style.display="flex";
+    deferredPrompt=event;
+    if(isMobileDevice()){
+      installBanner.style.display="flex";
     }
   });
 
-  btn.addEventListener("click",async()=>{
-    if(!deferredInstallPrompt) return;
-    const promptEvent=deferredInstallPrompt;
-    deferredInstallPrompt=null;
-    banner.style.display="none";
+  installBtn.addEventListener("click",async()=>{
+    if(!deferredPrompt) return;
+    const promptEvent=deferredPrompt;
+    deferredPrompt=null;
     try{
       await promptEvent.prompt();
       await promptEvent.userChoice;
-    }catch(e){ console.warn("Install prompt:",e); }
+    }catch(e){
+      console.warn("PWA install prompt:",e);
+    }
+    installBanner.style.display="none";
+  });
+
+  closeBtn.addEventListener("click",()=>{
+    installBanner.style.display="none";
   });
 
   window.addEventListener("appinstalled",()=>{
-    deferredInstallPrompt=null;
-    banner.style.display="none";
+    installBanner.style.display="none";
+    deferredPrompt=null;
   });
 }
 window.addEventListener("DOMContentLoaded",()=>{
