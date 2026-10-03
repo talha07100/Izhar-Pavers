@@ -359,6 +359,19 @@ body:has(.documents-portal.open) .saved-card{display:none}
 <h3 style="margin-top:0">Terms &amp; Conditions</h3>
 <p class="sub" style="margin-bottom:10px">Manage the default Terms &amp; Conditions. These terms will be applied automatically to newly created documents.</p>
 <div class="master-terms-editor-list" id="masterTermsEditorList"></div>
+<div id="termsAuthControl" class="card" style="margin-top:12px;background:#f8fafc">
+  <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
+    <div>
+      <h4 style="margin:0 0 4px">Lock Terms &amp; Conditions Editing</h4>
+      <p class="hint" style="margin:0">Turn ON to prevent users from changing, formatting or reordering terms.</p>
+    </div>
+    <label style="display:flex;align-items:center;gap:8px;font-weight:700">
+      <input type="checkbox" id="termsAuthToggle" onchange="toggleTermsAuth(this.checked)">
+      <span>Lock Editing</span>
+    </label>
+  </div>
+</div>
+
 <div class="card" style="margin-top:12px;background:#f8fafc">
 <h4 style="margin:0 0 8px">Terms &amp; Conditions Text Size</h4>
 <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
@@ -865,30 +878,66 @@ const defaultTerms = [
 "DUE TO LAW & ORDER SITUATION UNAVAILABILITY OF FUEL OUR COMMITMENT CAN BE DISTURB"
 ];
 
-function getMasterTerms(){
+function normalizeMasterTerm(value){
+  if(value && typeof value==="object"){
+    return {
+      text:String(value.text||"").trim(),
+      highlight:!!value.highlight,
+      highlightColor:String(value.highlightColor||"#fff3a3"),
+      bold:!!value.bold,
+      italic:!!value.italic,
+      fontSize:Math.min(16,Math.max(7,parseInt(value.fontSize||getTermsFontSize(),10)||9))
+    };
+  }
+  return {text:String(value||"").trim(),highlight:false,highlightColor:"#fff3a3",bold:false,italic:false,fontSize:getTermsFontSize()};
+}
+function getMasterTermData(){
   try{
     const saved=JSON.parse(localStorage.getItem(DEFAULT_TERMS_KEY)||"null");
-    if(Array.isArray(saved) && saved.length) return saved.map(x=>String(x||"").trim()).filter(Boolean);
+    if(Array.isArray(saved) && saved.length){
+      return saved.map(normalizeMasterTerm).filter(x=>x.text);
+    }
   }catch(e){}
-  return defaultTerms.slice();
+  return defaultTerms.map(normalizeMasterTerm);
+}
+function getMasterTerms(){
+  return getMasterTermData().map(x=>x.text).filter(Boolean);
 }
 function loadMasterTermsSettings(){
   const box=document.getElementById("masterTermsEditorList");
   if(!box) return;
   box.innerHTML="";
-  getMasterTerms().forEach(t=>addMasterTermBox(t));
+  getMasterTermData().forEach(t=>addMasterTermBox(t));
   refreshMasterTermNumbers();
+  applyTermsAuthLock();
 }
 function addMasterTermBox(value=""){
   const box=document.getElementById("masterTermsEditorList");
   if(!box) return;
+  const t=normalizeMasterTerm(value);
   const row=document.createElement("div");
   row.className="master-term-box";
+  row.dataset.highlight=t.highlight?"1":"0";
+  row.dataset.highlightColor=t.highlightColor;
+  row.dataset.bold=t.bold?"1":"0";
+  row.dataset.italic=t.italic?"1":"0";
+  row.dataset.fontSize=String(t.fontSize);
   row.innerHTML=`<div class="master-term-number"></div>
-    <textarea class="master-term-input" rows="2" placeholder="Enter Terms & Conditions">${esc(value)}</textarea>
-    <button type="button" class="btn danger master-term-delete" title="Remove term" aria-label="Remove term" onclick="removeMasterTermBox(this)">×</button>`;
+    <textarea class="master-term-input" rows="2" placeholder="Enter Terms & Conditions">${esc(t.text)}</textarea>
+    <div class="term-style-controls" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+      <button type="button" class="btn secondary term-master-bold ${t.bold?"active":""}" onclick="toggleMasterTermStyle(this,'bold')" title="Bold">B</button>
+      <button type="button" class="btn secondary term-master-italic ${t.italic?"active":""}" onclick="toggleMasterTermStyle(this,'italic')" title="Italic"><i>I</i></button>
+      <label style="display:flex;align-items:center;gap:4px;font-size:12px;font-weight:700">
+        <input type="checkbox" class="term-master-highlight" ${t.highlight?"checked":""} onchange="toggleMasterTermHighlight(this)"> Highlight
+      </label>
+      <input type="color" class="term-master-color" value="${t.highlightColor}" onchange="setMasterTermColor(this)" title="Highlight color">
+      <button type="button" class="btn secondary" onclick="moveMasterTerm(this,-1)" title="Move up">↑</button>
+      <button type="button" class="btn secondary" onclick="moveMasterTerm(this,1)" title="Move down">↓</button>
+      <button type="button" class="btn danger master-term-delete" title="Remove term" aria-label="Remove term" onclick="removeMasterTermBox(this)">Remove</button>
+    </div>`;
   box.appendChild(row);
   refreshMasterTermNumbers();
+  applyTermsAuthLock();
 }
 function removeMasterTermBox(btn){
   const box=document.getElementById("masterTermsEditorList");
@@ -901,11 +950,50 @@ function refreshMasterTermNumbers(){
   document.querySelectorAll("#masterTermsEditorList .master-term-box").forEach((row,i)=>{
     const n=row.querySelector(".master-term-number");
     if(n) n.textContent=String(i+1);
+    const moves=row.querySelectorAll("button[onclick^='moveMasterTerm']");
+    if(moves.length>=2){
+      moves[0].disabled=i===0;
+      moves[1].disabled=i===document.querySelectorAll("#masterTermsEditorList .master-term-box").length-1;
+    }
   });
 }
+function toggleMasterTermStyle(btn,kind){
+  const row=btn.closest(".master-term-box");
+  const key=kind==="bold"?"bold":"italic";
+  const active=row.dataset[key]!=="1";
+  row.dataset[key]=active?"1":"0";
+  btn.classList.toggle("active",active);
+}
+function toggleMasterTermHighlight(check){
+  const row=check.closest(".master-term-box");
+  row.dataset.highlight=check.checked?"1":"0";
+}
+function setMasterTermColor(input){
+  const row=input.closest(".master-term-box");
+  row.dataset.highlightColor=input.value;
+  const check=row.querySelector(".term-master-highlight");
+  if(check) check.checked=true;
+  row.dataset.highlight="1";
+}
+function moveMasterTerm(btn,direction){
+  if(isTermsAuthLocked()) return;
+  const row=btn.closest(".master-term-box");
+  const box=document.getElementById("masterTermsEditorList");
+  if(direction<0 && row.previousElementSibling) box.insertBefore(row,row.previousElementSibling);
+  if(direction>0 && row.nextElementSibling) box.insertBefore(row.nextElementSibling,row);
+  refreshMasterTermNumbers();
+}
 function saveMasterTerms(){
+  if(isTermsAuthLocked()) return;
   const rows=[...document.querySelectorAll("#masterTermsEditorList .master-term-box")];
-  const terms=rows.map(row=>row.querySelector(".master-term-input")?.value.trim()||"").filter(Boolean);
+  const terms=rows.map(row=>({
+    text:row.querySelector(".master-term-input")?.value.trim()||"",
+    highlight:row.dataset.highlight==="1",
+    highlightColor:row.dataset.highlightColor||"#fff3a3",
+    bold:row.dataset.bold==="1",
+    italic:row.dataset.italic==="1",
+    fontSize:Math.min(16,Math.max(7,parseInt(row.dataset.fontSize||getTermsFontSize(),10)||9))
+  })).filter(x=>x.text);
   if(!terms.length){
     loadMasterTermsSettings();
     const st=document.getElementById("termsSettingsStatus"); if(st) st.textContent="Please enter at least one term.";
@@ -913,10 +1001,31 @@ function saveMasterTerms(){
   }
   localStorage.setItem(DEFAULT_TERMS_KEY,JSON.stringify(terms));
   const box=document.getElementById("termsList");
-  if(box){box.innerHTML=""; terms.forEach(t=>addTerm(t));}
+  if(box){
+    box.innerHTML="";
+    terms.forEach(t=>addTerm(t.text,t.highlight,t.highlightColor,t.bold,t.italic,t.fontSize));
+  }
   const st=document.getElementById("termsSettingsStatus"); if(st) st.textContent="Terms & Conditions saved.";
 }
-
+function isTermsAuthLocked(){
+  return localStorage.getItem("termsAuthLocked")==="true";
+}
+function applyTermsAuthLock(){
+  const locked=isTermsAuthLocked();
+  const toggle=document.getElementById("termsAuthToggle");
+  if(toggle) toggle.checked=locked;
+  document.querySelectorAll("#masterTermsEditorList textarea,#masterTermsEditorList button,#masterTermsEditorList input").forEach(el=>{
+    el.disabled=locked;
+  });
+  const add=document.querySelector('#termsSettingsCard button[onclick="addMasterTermBox()"]');
+  const save=document.querySelector('#termsSettingsCard button[onclick="saveMasterTerms()"]');
+  if(add) add.disabled=locked;
+  if(save) save.disabled=locked;
+}
+function toggleTermsAuth(locked){
+  localStorage.setItem("termsAuthLocked",locked?"true":"false");
+  applyTermsAuthLock();
+}
 function addTerm(value="", highlight=false, highlightColor="#fff3a3", bold=false, italic=false, fontSize=null){
   const box=document.getElementById("termsList");
   const row=document.createElement("div");
@@ -1293,7 +1402,8 @@ function newDocument(){
   if(typeof updateReferencePreview==='function') updateReferencePreview();
   if(typeof addTerm==='function' && typeof defaultTerms!=='undefined'){
     const termsBox=document.getElementById("termsList");
-    if(termsBox){termsBox.innerHTML=""; getMasterTerms().forEach(t=>addTerm(t));}
+    if(termsBox){termsBox.innerHTML=""; getMasterTermData().forEach(t=>addTerm(t.text,t.highlight,t.highlightColor,t.bold,t.italic,t.fontSize));
+applyTermsAuthLock();}
   }
   const status=document.getElementById("status"); if(status) status.textContent="New file ready — reference will be generated automatically on Save / PDF.";
 }
@@ -2560,139 +2670,6 @@ window.addEventListener("DOMContentLoaded",()=>{
   setupInstallBanner();
 });
 
-</script>
-
-<script>
-/* === TERMS & CONDITIONS EDITING CONTROLS === */
-(function(){
-  const TERMS_LOCK_KEY = "termsAuthLocked";
-
-  function getTermsArray(){
-    if (Array.isArray(window.termsList)) return window.termsList;
-    if (Array.isArray(window.terms)) return window.terms;
-    window.termsList = [];
-    return window.termsList;
-  }
-
-  function saveTermsCompat(){
-    if (typeof window.saveTerms === "function") {
-      try { window.saveTerms(); return; } catch(e) { console.warn("saveTerms failed",e); }
-    }
-    localStorage.setItem("izhar_pavers_terms_list_v1", JSON.stringify(getTermsArray()));
-  }
-
-  window.updateTermText = function(index,val){
-    const a=getTermsArray(); if(!a[index]) return;
-    if(typeof a[index] === "string") a[index]={text:a[index],bold:false,italic:false,bg:"transparent"};
-    a[index].text=val;
-    saveTermsCompat();
-  };
-
-  window.toggleTermStyle = function(index,type){
-    const a=getTermsArray(); if(!a[index]) return;
-    if(typeof a[index] === "string") a[index]={text:a[index],bold:false,italic:false,bg:"transparent"};
-    a[index][type]=!a[index][type];
-    saveTermsCompat();
-    if(typeof window.renderTerms==="function") window.renderTerms();
-  };
-
-  window.changeTermBg = function(index,color){
-    const a=getTermsArray(); if(!a[index]) return;
-    if(typeof a[index] === "string") a[index]={text:a[index],bold:false,italic:false,bg:"transparent"};
-    a[index].bg=color;
-    saveTermsCompat();
-    if(typeof window.renderTerms==="function") window.renderTerms();
-  };
-
-  window.clearTermBg = function(index){
-    const a=getTermsArray(); if(!a[index]) return;
-    if(typeof a[index] === "string") a[index]={text:a[index],bold:false,italic:false,bg:"transparent"};
-    a[index].bg="transparent";
-    saveTermsCompat();
-    if(typeof window.renderTerms==="function") window.renderTerms();
-  };
-
-  window.moveTerm = function(index,direction){
-    const a=getTermsArray(), n=index+direction;
-    if(n<0 || n>=a.length) return;
-    [a[index],a[n]]=[a[n],a[index]];
-    saveTermsCompat();
-    if(typeof window.renderTerms==="function") window.renderTerms();
-  };
-
-  window.removeTerm = function(index){
-    const a=getTermsArray(); if(index<0 || index>=a.length) return;
-    a.splice(index,1);
-    saveTermsCompat();
-    if(typeof window.renderTerms==="function") window.renderTerms();
-  };
-
-  window.toggleTermsAuth = function(isLocked){
-    localStorage.setItem(TERMS_LOCK_KEY, String(!!isLocked));
-    if(typeof window.renderTerms==="function") window.renderTerms();
-  };
-
-  window.initTermsAuth = function(){
-    const t=document.getElementById("termsAuthToggle");
-    if(t) t.checked=localStorage.getItem(TERMS_LOCK_KEY)==="true";
-    if(typeof window.renderTerms==="function") window.renderTerms();
-  };
-
-  window.isTermsAuthLocked = function(){
-    return localStorage.getItem(TERMS_LOCK_KEY)==="true";
-  };
-
-  /* Replace the existing renderTerms when it exists so formatting/order controls
-     are actually visible and the locked state is enforced. */
-  window.renderTermsWithControls = function(){
-    const container=document.getElementById("termsContainer");
-    if(!container) return;
-    const a=getTermsArray();
-    const locked=window.isTermsAuthLocked();
-    container.innerHTML="";
-    a.forEach((raw,index)=>{
-      const term=typeof raw==="string"
-        ? {text:raw,bold:false,italic:false,bg:"transparent"}
-        : Object.assign({text:"",bold:false,italic:false,bg:"transparent"},raw);
-      a[index]=term;
-
-      const item=document.createElement("div");
-      item.className="flex flex-col gap-2 p-3 bg-white rounded-lg border shadow-sm mb-3";
-      const safe=String(term.text??"").replace(/[&<>"']/g,ch=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[ch]));
-      const style=`font-weight:${term.bold?"bold":"normal"};font-style:${term.italic?"italic":"normal"};background-color:${term.bg||"transparent"};`;
-      item.innerHTML=`
-        <div class="flex items-center gap-2">
-          <span class="bg-slate-800 text-white w-7 h-7 flex items-center justify-center rounded-full font-bold text-sm">${index+1}</span>
-          <input type="text" value="${safe}" style="${style}" class="w-full p-2 border rounded focus:outline-none" ${locked?"disabled":""}
-            onchange="updateTermText(${index}, this.value)">
-          ${locked?"":`<button type="button" onclick="removeTerm(${index})" class="bg-red-100 text-red-600 p-2 rounded hover:bg-red-200">✕</button>`}
-        </div>
-        ${locked?"":`
-        <div class="flex flex-wrap items-center gap-2 text-xs bg-slate-50 p-2 rounded">
-          <button type="button" onclick="toggleTermStyle(${index},'bold')" class="px-2 py-1 border rounded font-bold ${term.bold?"bg-blue-600 text-white":"bg-white"}">B</button>
-          <button type="button" onclick="toggleTermStyle(${index},'italic')" class="px-2 py-1 border rounded italic ${term.italic?"bg-blue-600 text-white":"bg-white"}">I</button>
-          <label class="flex items-center gap-1 cursor-pointer border px-2 py-1 rounded bg-white">
-            <span>Highlight:</span>
-            <input type="color" value="${term.bg==="transparent"?"#ffff00":term.bg}" onchange="changeTermBg(${index},this.value)" class="w-5 h-5 cursor-pointer border-0 p-0">
-          </label>
-          <button type="button" onclick="clearTermBg(${index})" class="px-2 py-1 border rounded bg-white text-gray-600">Remove Color</button>
-          <div class="ml-auto flex gap-1">
-            <button type="button" onclick="moveTerm(${index},-1)" ${index===0?"disabled":""} class="border px-2 py-1 rounded ${index===0?"opacity-30":"bg-white hover:bg-gray-100"}">▲ Up</button>
-            <button type="button" onclick="moveTerm(${index},1)" ${index===a.length-1?"disabled":""} class="border px-2 py-1 rounded ${index===a.length-1?"opacity-30":"bg-white hover:bg-gray-100"}">▼ Down</button>
-          </div>
-        </div>`}`;
-      container.appendChild(item);
-    });
-  };
-
-  const oldRender=window.renderTerms;
-  window.renderTerms=function(){
-    if(document.getElementById("termsContainer")) return window.renderTermsWithControls();
-    if(typeof oldRender==="function") return oldRender.apply(this,arguments);
-  };
-
-  document.addEventListener("DOMContentLoaded", window.initTermsAuth);
-})();
 </script>
 
 </body>
