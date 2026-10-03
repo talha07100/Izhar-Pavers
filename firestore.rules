@@ -7,6 +7,10 @@ service cloud.firestore {
       return /databases/$(database)/documents/appConfig/authorization;
     }
 
+    function termsDoc() {
+      return /databases/$(database)/documents/appConfig/terms;
+    }
+
     function hasAuthConfig() {
       return exists(authDoc());
     }
@@ -32,6 +36,11 @@ service cloud.firestore {
         );
     }
 
+    function termsEditingUnlocked() {
+      return signedIn()
+        && (!hasAuthConfig() || get(authDoc()).data.termsLocked != true);
+    }
+
     function appAccessAllowed() {
       return signedIn()
         && (
@@ -44,14 +53,18 @@ service cloud.firestore {
 
     match /appConfig/authorization {
       allow read: if signedIn();
-
-      // First-time creation is restricted to the bootstrap owner.
       allow create: if isBootstrapOwner() && !hasAuthConfig();
-
-      // All configured Admins may manage Admins, authorization and Terms Lock.
       allow update: if isCurrentAdmin();
-
       allow delete: if false;
+    }
+
+    // Shared Terms & Conditions configuration.
+    // Everyone signed in can read it. Admins can always write.
+    // Normal signed-in/authorized users can write only while the Admin lock is OFF.
+    match /appConfig/terms {
+      allow read: if signedIn();
+      allow create, update: if isCurrentAdmin() || termsEditingUnlocked();
+      allow delete: if isCurrentAdmin();
     }
 
     match /users/{userId}/{document=**} {
