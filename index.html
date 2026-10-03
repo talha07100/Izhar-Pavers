@@ -315,6 +315,72 @@ body:has(.documents-portal.open) .saved-card{display:none}
   #termsList .actual-term-order{margin-left:0 !important}
 }
 
+
+/* === TERMS & CONDITIONS READABLE TEXT BOX FIX === */
+#masterTermsEditorList .master-term-box,
+.condition-card,
+.term-box{
+  display:flex !important;
+  flex-direction:column !important;
+  align-items:stretch !important;
+  gap:10px !important;
+  width:100% !important;
+  min-width:0 !important;
+  box-sizing:border-box !important;
+}
+
+#masterTermsEditorList .master-term-box .master-term-number{
+  align-self:flex-start !important;
+  flex:0 0 auto !important;
+}
+
+#masterTermsEditorList .master-term-box .master-term-input,
+.condition-card textarea,
+.condition-card input[type="text"],
+.term-box textarea,
+.term-box input[type="text"]{
+  display:block !important;
+  width:100% !important;
+  min-width:0 !important;
+  min-height:90px !important;
+  height:auto !important;
+  font-size:15px !important;
+  line-height:1.4 !important;
+  padding:10px !important;
+  border:1px solid #d1d5db !important;
+  border-radius:8px !important;
+  resize:vertical !important;
+  box-sizing:border-box !important;
+  flex:none !important;
+}
+
+#masterTermsEditorList .master-term-box .term-style-controls,
+.toolbar{
+  display:flex !important;
+  flex-wrap:wrap !important;
+  align-items:center !important;
+  justify-content:flex-start !important;
+  gap:8px !important;
+  width:100% !important;
+  min-width:0 !important;
+}
+
+@media(max-width:700px){
+  #masterTermsEditorList .master-term-box{
+    gap:10px !important;
+    padding:10px !important;
+  }
+  #masterTermsEditorList .master-term-box .master-term-input,
+  .condition-card textarea,
+  .condition-card input[type="text"],
+  .term-box textarea,
+  .term-box input[type="text"]{
+    min-height:120px !important;
+    font-size:16px !important;
+    line-height:1.5 !important;
+  }
+}
+
 </style>
 </head>
 <body>
