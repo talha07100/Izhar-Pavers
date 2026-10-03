@@ -366,6 +366,102 @@ body:has(.documents-portal.open) .saved-card{display:none}
   }
 }
 
+
+/* === TERMS COMPACT PROFESSIONAL TOOLBAR === */
+#termsList .actual-term-toolbar{
+  flex-wrap:nowrap !important;
+  gap:4px !important;
+  padding-top:6px !important;
+  overflow:hidden !important;
+}
+#termsList .actual-term-formatting{
+  flex-wrap:nowrap !important;
+  gap:3px !important;
+  min-width:0 !important;
+  flex:1 1 auto !important;
+  overflow:hidden !important;
+}
+#termsList .actual-term-order{
+  flex:0 0 auto !important;
+  gap:3px !important;
+  margin-left:0 !important;
+}
+#termsList .term-history-btn,
+#termsList .term-style-btn,
+#termsList .term-move{
+  min-width:27px !important;
+  width:27px !important;
+  height:29px !important;
+  padding:0 !important;
+  flex:0 0 27px !important;
+  font-size:13px !important;
+}
+#termsList .term-remove{
+  min-width:48px !important;
+  width:48px !important;
+  height:29px !important;
+  padding:0 5px !important;
+  flex:0 0 48px !important;
+  font-size:11px !important;
+}
+#termsList .term-size-label{
+  min-width:18px !important;
+  width:18px !important;
+  font-size:10px !important;
+}
+#termsList .term-highlight{
+  display:flex !important;
+  align-items:center !important;
+  gap:3px !important;
+  flex:0 0 auto !important;
+  white-space:nowrap !important;
+}
+#termsList .term-highlight label{
+  gap:2px !important;
+  font-size:10px !important;
+}
+#termsList .term-color-btn{
+  width:27px !important;
+  min-width:27px !important;
+  height:29px !important;
+  padding:0 !important;
+  justify-content:center !important;
+}
+#termsList .term-color-btn .color-name{display:none !important}
+#termsList .actual-term-textarea{
+  min-height:80px !important;
+  height:80px !important;
+  padding:8px 10px !important;
+  line-height:1.35 !important;
+}
+@media(max-width:700px){
+  #termsList .actual-term-toolbar{
+    justify-content:flex-start !important;
+    gap:2px !important;
+  }
+  #termsList .actual-term-formatting{gap:2px !important}
+  #termsList .actual-term-order{gap:2px !important}
+  #termsList .term-history-btn,
+  #termsList .term-style-btn,
+  #termsList .term-move,
+  #termsList .term-color-btn{
+    min-width:25px !important;
+    width:25px !important;
+    height:27px !important;
+    flex-basis:25px !important;
+    font-size:12px !important;
+  }
+  #termsList .term-remove{
+    min-width:44px !important;
+    width:44px !important;
+    height:27px !important;
+    flex-basis:44px !important;
+    font-size:10px !important;
+  }
+  #termsList .term-size-label{min-width:16px !important;width:16px !important;font-size:9px !important}
+  #termsList .term-highlight label{font-size:9px !important}
+  #termsList .actual-term-textarea{min-height:80px !important;height:80px !important;font-size:15px !important}
+}
 </style>
 </head>
 <body>
