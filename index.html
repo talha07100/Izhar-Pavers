@@ -2,6 +2,16 @@
 
 <html lang="en">
 <head>
+<script>
+/* Early mobile menu fallback: keep hamburger menu usable even if another app module is delayed. */
+window.toggleMobileMenu = window.toggleMobileMenu || function(open){
+  var overlay=document.getElementById('mobileMenuOverlay');
+  if(!overlay) return;
+  if(open){ overlay.classList.add('open'); document.body.classList.add('menu-open'); document.body.style.overflow='hidden'; }
+  else { overlay.classList.remove('open'); document.body.classList.remove('menu-open'); document.body.style.overflow=''; }
+};
+</script>
+
 <meta charset="utf-8"/>
 <meta content="width=device-width,initial-scale=1" name="viewport"/>
 <meta content="#0b2f6b" name="theme-color"/>
@@ -2656,5 +2666,16 @@ window.addEventListener("DOMContentLoaded",()=>{
 });
 
 </script>
+
+<script>
+document.addEventListener('DOMContentLoaded',function(){
+  var btn=document.querySelector('.mobile-menu-btn');
+  if(btn && !btn.dataset.menuBound){
+    btn.dataset.menuBound='1';
+    btn.addEventListener('click',function(e){ e.preventDefault(); e.stopPropagation(); window.toggleMobileMenu(true); });
+  }
+});
+</script>
+
 </body>
 </html>
