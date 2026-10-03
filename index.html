@@ -1723,7 +1723,9 @@ function newDocument(){
   toggleMobileMenu(false);
   if(window.requireCloudLogin && !window.requireCloudLogin()) return false;
   currentEditingDocumentId=null;
-  activeDocumentProfileSnapshot=null;
+  // Freeze the current profile/signature/stamp for this new file immediately.
+  // Later Settings changes will only affect subsequently created files.
+  activeDocumentProfileSnapshot=JSON.parse(JSON.stringify(getProfileSettings()));
   document.getElementById("ref").value="";
   const customRefEl=document.getElementById("customRef"); if(customRefEl) customRefEl.value="";
   document.getElementById("date").value="";
@@ -2410,14 +2412,36 @@ window.handleSettingsBack=function(){
   if(isHome){ toggleSettings(false); } else { showSettingsHome(); }
 };
 window.openTermsViewer=function(){
-  const overlay=document.getElementById('termsViewerOverlay');
-  const list=document.getElementById('termsViewerList');
-  if(!overlay||!list)return;
-  const terms=getTermData().map(x=>String(x.text||'').trim()).filter(Boolean);
-  list.innerHTML=terms.length?terms.map((t,i)=>`<li>${esc(t)}</li>`).join(''):'<li>No Terms & Conditions have been added.</li>';
-  overlay.classList.add('open');
+  // Document-level Terms editor: edits apply only to the current quotation/invoice.
+  const box=document.getElementById("termsList");
+  if(!box)return;
+  const card=box.closest(".card");
+  if(card) card.scrollIntoView({behavior:"smooth",block:"center"});
+  box.style.display="block";
+  const actions=box.nextElementSibling;
+  if(actions) actions.style.display="flex";
+  const hint=actions?.nextElementSibling;
+  if(hint) hint.style.display="block";
+  const btn=document.querySelector('button[onclick="openTermsViewer()"]');
+  if(btn){
+    btn.textContent="📋 Hide Terms & Conditions";
+    btn.setAttribute("onclick","closeTermsViewer()");
+  }
 };
-window.closeTermsViewer=function(){document.getElementById('termsViewerOverlay')?.classList.remove('open');};
+window.closeTermsViewer=function(){
+  const box=document.getElementById("termsList");
+  if(box) box.style.display="none";
+  const actions=box?.nextElementSibling;
+  if(actions) actions.style.display="none";
+  const hint=actions?.nextElementSibling;
+  if(hint) hint.style.display="none";
+  const btn=document.querySelector('button[onclick="closeTermsViewer()"]');
+  if(btn){
+    btn.textContent="📋 View Terms & Conditions";
+    btn.setAttribute("onclick","openTermsViewer()");
+  }
+  document.getElementById("termsViewerOverlay")?.classList.remove("open");
+};
 function toggleSettings(open){
   const overlay=document.getElementById("settingsOverlay");
   if(!overlay) return;
