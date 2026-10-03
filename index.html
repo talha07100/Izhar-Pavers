@@ -2762,28 +2762,60 @@ function setupInstallBanner(){
   let deferredPrompt=null;
 
   function isMobileDevice(){
-    return /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+    return /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) ||
+           (navigator.maxTouchPoints>1 && /Macintosh/i.test(navigator.userAgent));
+  }
+
+  function isStandalone(){
+    return window.matchMedia('(display-mode: standalone)').matches ||
+           window.navigator.standalone === true;
+  }
+
+  function showBanner(){
+    if(isMobileDevice() && !isStandalone()){
+      installBanner.style.display="flex";
+    }
+  }
+
+  function showInstallHelp(){
+    let modal=document.getElementById('pwa-install-help');
+    if(modal) modal.remove();
+    modal=document.createElement('div');
+    modal.id='pwa-install-help';
+    modal.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:10000;display:flex;align-items:center;justify-content:center;padding:20px;box-sizing:border-box;font-family:sans-serif;';
+    const card=document.createElement('div');
+    card.style.cssText='width:min(420px,100%);background:#fff;border-radius:14px;padding:20px;box-sizing:border-box;box-shadow:0 10px 35px rgba(0,0,0,.35);color:#222;';
+    card.innerHTML='<div style="font-size:18px;font-weight:700;margin-bottom:10px;">Install Izhar Pavers</div>'+
+      '<div style="font-size:14px;line-height:1.55;margin-bottom:14px;">Agar Install button se automatic install screen na khulay to browser ke menu se app install karein:</div>'+
+      '<div style="font-size:14px;line-height:1.55;margin-bottom:8px;"><b>Android / Chrome:</b> ⋮ Menu → <b>Install app</b> ya <b>Add to Home screen</b>.</div>'+
+      '<div style="font-size:14px;line-height:1.55;margin-bottom:16px;"><b>iPhone / iPad:</b> Share button → <b>Add to Home Screen</b>.</div>'+
+      '<button type="button" id="pwa-help-close" style="width:100%;background:#0b2f6b;color:#fff;border:0;padding:11px;border-radius:8px;font-weight:700;font-size:14px;">Close</button>';
+    modal.appendChild(card);
+    document.body.appendChild(modal);
+    document.getElementById('pwa-help-close').onclick=()=>modal.remove();
+    modal.addEventListener('click',e=>{if(e.target===modal) modal.remove();});
   }
 
   window.addEventListener("beforeinstallprompt",event=>{
     event.preventDefault();
     deferredPrompt=event;
-    if(isMobileDevice()){
-      installBanner.style.display="flex";
-    }
+    showBanner();
   });
 
   installBtn.addEventListener("click",async()=>{
-    if(!deferredPrompt) return;
-    const promptEvent=deferredPrompt;
-    deferredPrompt=null;
-    try{
-      await promptEvent.prompt();
-      await promptEvent.userChoice;
-    }catch(e){
-      console.warn("PWA install prompt:",e);
+    if(deferredPrompt){
+      const promptEvent=deferredPrompt;
+      deferredPrompt=null;
+      try{
+        await promptEvent.prompt();
+        await promptEvent.userChoice;
+      }catch(e){
+        console.warn("PWA install prompt:",e);
+      }
+      installBanner.style.display="none";
+      return;
     }
-    installBanner.style.display="none";
+    showInstallHelp();
   });
 
   closeBtn.addEventListener("click",()=>{
@@ -2794,7 +2826,12 @@ function setupInstallBanner(){
     installBanner.style.display="none";
     deferredPrompt=null;
   });
+
+  if(!isStandalone() && isMobileDevice()){
+    setTimeout(showBanner,800);
+  }
 }
+
 window.addEventListener("DOMContentLoaded",()=>{
   restoreAuthorizationLocalStorage();
   renderAuthorizationUI();
