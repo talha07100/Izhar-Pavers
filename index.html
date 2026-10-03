@@ -1327,13 +1327,10 @@ function saveMasterTerms(){
     const st=document.getElementById("termsSettingsStatus"); if(st) st.textContent="Please enter at least one term.";
     return;
   }
+  // Save ONLY as the default template for future New Files.
+  // Do not replace the Terms in the currently open document.
   localStorage.setItem(DEFAULT_TERMS_KEY,JSON.stringify(terms));
-  const box=document.getElementById("termsList");
-  if(box){
-    box.innerHTML="";
-    terms.forEach(t=>addTerm(t.text,t.highlight,t.highlightColor,t.bold,t.italic,t.fontSize));
-  }
-  const st=document.getElementById("termsSettingsStatus"); if(st) st.textContent="Terms & Conditions saved.";
+  const st=document.getElementById("termsSettingsStatus"); if(st) st.textContent="Default Terms & Conditions saved for new files.";
   updateTermsHistoryButtons();
 }
 function isTermsAuthLocked(){
@@ -1680,10 +1677,16 @@ function currentDocumentData(){
       rows:getPaymentData()
     },
     terms:getTermData(),
+    // Freeze the profile/signature/stamp used by this document.
+    // Existing documents keep their original snapshot even after Settings change.
+    savedProfile: activeDocumentProfileSnapshot
+      ? JSON.parse(JSON.stringify(activeDocumentProfileSnapshot))
+      : JSON.parse(JSON.stringify(getProfileSettings())),
     savedAt:new Date().toISOString()
   };
 }
 let currentEditingDocumentId=null;
+let activeDocumentProfileSnapshot=null;
 
 function saveCurrentDocument(silent=false){
   if(window.requireCloudLogin && !window.requireCloudLogin()) return false;
@@ -1724,6 +1727,7 @@ function newDocument(){
   toggleMobileMenu(false);
   if(window.requireCloudLogin && !window.requireCloudLogin()) return false;
   currentEditingDocumentId=null;
+  activeDocumentProfileSnapshot=null;
   document.getElementById("ref").value="";
   const customRefEl=document.getElementById("customRef"); if(customRefEl) customRefEl.value="";
   document.getElementById("date").value="";
@@ -1760,6 +1764,7 @@ async function openSavedDocumentPDF(id){
   // The folder remains open and the saved document is restored afterwards.
   const previous=currentDocumentData();
   const previousEditingId=currentEditingDocumentId;
+  const previousProfileSnapshot=activeDocumentProfileSnapshot ? JSON.parse(JSON.stringify(activeDocumentProfileSnapshot)) : null;
   try{
     applySavedDocumentToForm(doc,false);
     const ok=await generatePDF(true);
@@ -1770,6 +1775,7 @@ async function openSavedDocumentPDF(id){
   }finally{
     applySavedDocumentToForm(previous,false);
     currentEditingDocumentId=previousEditingId;
+    activeDocumentProfileSnapshot=previousProfileSnapshot;
     renderSavedDocuments();
   }
 }
@@ -1780,6 +1786,7 @@ async function printSavedDocument(id){
   if(!doc)return;
   const previous=currentDocumentData();
   const previousEditingId=currentEditingDocumentId;
+  const previousProfileSnapshot=activeDocumentProfileSnapshot ? JSON.parse(JSON.stringify(activeDocumentProfileSnapshot)) : null;
   try{
     applySavedDocumentToForm(doc,false);
     const ok=await generatePDF(false,true);
@@ -1790,6 +1797,7 @@ async function printSavedDocument(id){
   }finally{
     applySavedDocumentToForm(previous,false);
     currentEditingDocumentId=previousEditingId;
+    activeDocumentProfileSnapshot=previousProfileSnapshot;
     renderSavedDocuments();
     renderDocumentPortal();
   }
@@ -1804,6 +1812,7 @@ async function downloadSavedDocument(id){
   // The current unsaved form is restored afterwards so nothing gets lost.
   const previous=currentDocumentData();
   const previousEditingId=currentEditingDocumentId;
+  const previousProfileSnapshot=activeDocumentProfileSnapshot ? JSON.parse(JSON.stringify(activeDocumentProfileSnapshot)) : null;
   try{
     applySavedDocumentToForm(doc,false);
     const ok=await generatePDF();
@@ -1814,6 +1823,7 @@ async function downloadSavedDocument(id){
   }finally{
     applySavedDocumentToForm(previous,false);
     currentEditingDocumentId=previousEditingId;
+    activeDocumentProfileSnapshot=previousProfileSnapshot;
     renderSavedDocuments();
   }
 }
@@ -1821,6 +1831,10 @@ async function downloadSavedDocument(id){
 function applySavedDocumentToForm(doc, closePortal=true){
   if(!doc)return;
   currentEditingDocumentId=doc.id||null;
+  // Restore the exact profile/signature/stamp snapshot saved with this document.
+  activeDocumentProfileSnapshot = doc.savedProfile
+    ? JSON.parse(JSON.stringify(doc.savedProfile))
+    : JSON.parse(JSON.stringify(getProfileSettings()));
   if(closePortal) closeSavedFolder();
   document.getElementById("ref").value=doc.ref||"";
   const customRefEl=document.getElementById("customRef"); if(customRefEl) customRefEl.value=doc.customRef||"";
@@ -2125,7 +2139,7 @@ async function generatePDF(openPdf=false, printOnly=false){
     const timesB=await pdf.embedFont(StandardFonts.TimesRomanBold);
     const timesI=await pdf.embedFont(StandardFonts.TimesRomanItalic);
     const timesBI=await pdf.embedFont(StandardFonts.TimesRomanBoldItalic);
-    const profile=getProfileSettings();
+    const profile=activeDocumentProfileSnapshot || getProfileSettings();
 
     // Signature and stamp are already part of the original template, matching Version 30.
     // Do not redraw them here; this prevents the stray mark beside the signature.
