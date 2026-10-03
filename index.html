@@ -320,6 +320,49 @@ body:has(.documents-portal.open) .saved-card{display:none}
   #termsList .actual-term-order{margin-left:0 !important}
 }
 
+
+/* === TERMS TEXT BOX WIDTH FIX === */
+#masterTermsEditorList .master-term-box{
+  display:grid !important;
+  grid-template-columns:32px minmax(0,1fr) auto !important;
+  align-items:start !important;
+  width:100% !important;
+  min-width:0 !important;
+  box-sizing:border-box !important;
+}
+#masterTermsEditorList .master-term-input{
+  width:100% !important;
+  min-width:0 !important;
+  max-width:none !important;
+  display:block !important;
+  box-sizing:border-box !important;
+}
+#termsList .actual-term-writing-row{
+  display:grid !important;
+  grid-template-columns:32px minmax(0,1fr) !important;
+  align-items:start !important;
+  gap:10px !important;
+  width:100% !important;
+  min-width:0 !important;
+  box-sizing:border-box !important;
+}
+#termsList .actual-term-textarea{
+  width:100% !important;
+  min-width:0 !important;
+  max-width:none !important;
+  display:block !important;
+  box-sizing:border-box !important;
+}
+@media(max-width:700px){
+  #masterTermsEditorList .master-term-box{
+    grid-template-columns:28px minmax(0,1fr) auto !important;
+    gap:7px !important;
+  }
+  #termsList .actual-term-writing-row{
+    grid-template-columns:28px minmax(0,1fr) !important;
+    gap:8px !important;
+  }
+}
 </style>
 </head>
 <body>
