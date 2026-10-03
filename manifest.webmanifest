@@ -1,20 +1,25 @@
 {
-  "id": "./",
-  "name": "Izhar Pavers — Quotation & Invoice Generator",
+  "name": "Izhar Pavers - Quotation Generator",
   "short_name": "Izhar Pavers",
   "description": "Izhar Pavers quotation and invoice generator.",
-  "lang": "en",
-  "start_url": "./index.html",
+  "start_url": "./",
   "scope": "./",
   "display": "standalone",
-  "display_override": ["standalone", "minimal-ui"],
-  "orientation": "portrait-primary",
-  "background_color": "#eef1f5",
+  "background_color": "#ffffff",
   "theme_color": "#0b2f6b",
-  "prefer_related_applications": false,
+  "orientation": "portrait-primary",
   "icons": [
-    {"src":"./icon-192.png","sizes":"192x192","type":"image/png","purpose":"any"},
-    {"src":"./icon-512.png","sizes":"512x512","type":"image/png","purpose":"any"},
-    {"src":"./icon-512.png","sizes":"512x512","type":"image/png","purpose":"maskable"}
+    {
+      "src": "./icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "./icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
   ]
 }
