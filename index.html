@@ -223,12 +223,18 @@ body:has(.documents-portal.open) .saved-card{display:none}
 @media(max-width:700px){.settings-nav{grid-template-columns:1fr}.terms-viewer-overlay{padding:10px}.terms-viewer{max-height:90vh}}
 
 .terms-viewer-actions{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;margin-top:14px}
+.install-banner-dismiss{border:0;background:transparent;color:#94a3b8;font-size:15px;cursor:pointer;padding:4px 6px;border-radius:7px}
+.install-banner-dismiss:hover{background:#1e293b;color:#fff}
+
 </style>
 </head>
 <body>
 <div id="installBanner" role="status" aria-label="Install Izhar Pavers app">
   <div><strong>Install Izhar Pavers App</strong><span>Install this app on your device for quick access.</span></div>
-  <button id="installAppBtn" type="button">Install App</button>
+  <div style="display:flex;align-items:center;gap:8px">
+    <button id="installAppBtn" type="button">Install App</button>
+    <button id="dismissInstallBannerBtn" class="install-banner-dismiss" type="button" aria-label="Dismiss install banner" title="Dismiss">✕</button>
+  </div>
 </div>
 <button aria-label="Open menu" class="mobile-menu-btn" onclick="toggleMobileMenu(true)" title="Menu" type="button"><span></span><span></span><span></span></button>
 <div class="mobile-menu-overlay" id="mobileMenuOverlay" onclick="if(event.target===this) toggleMobileMenu(false)">
@@ -281,8 +287,7 @@ body:has(.documents-portal.open) .saved-card{display:none}
 <input id="authorizedEmailInput" placeholder="Enter Gmail address (or multiple Gmail addresses separated by comma)" type="email"/>
 <button class="btn primary" onclick="addAuthorizedEmail()" type="button">+ Add Authorization</button>
 </div>
-<div class="auth-note" style="margin-top:8px">Approved Gmail accounts:</div>
-<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:8px"><span style="font-weight:800;color:#667085">Approved Gmail accounts:</span></div><div class="auth-list" id="authorizationList"></div>
+<div class="auth-note" style="margin-top:8px">Approved Gmail accounts:</div><div class="auth-list" id="authorizationList"></div>
 </div>
 <div class="ownership-card" id="ownershipCard" style="display:none">
 <h3 style="margin:0 0 5px">👑 Admin Ownership</h3>
@@ -2645,13 +2650,25 @@ let deferredInstallPrompt=null;
 function setupInstallBanner(){
   const banner=document.getElementById("installBanner");
   const btn=document.getElementById("installAppBtn");
+  const dismiss=document.getElementById("dismissInstallBannerBtn");
   if(!banner||!btn) return;
   banner.style.display="none";
+
+  if(dismiss){
+    dismiss.addEventListener("click",()=>{
+      banner.style.display="none";
+      localStorage.setItem("installBannerDismissed","true");
+    });
+  }
+
   window.addEventListener("beforeinstallprompt",event=>{
     event.preventDefault();
     deferredInstallPrompt=event;
-    banner.style.display="flex";
+    if(localStorage.getItem("installBannerDismissed")!=="true"){
+      banner.style.display="flex";
+    }
   });
+
   btn.addEventListener("click",async()=>{
     if(!deferredInstallPrompt) return;
     const promptEvent=deferredInstallPrompt;
@@ -2662,7 +2679,11 @@ function setupInstallBanner(){
       await promptEvent.userChoice;
     }catch(e){ console.warn("Install prompt:",e); }
   });
-  window.addEventListener("appinstalled",()=>{ deferredInstallPrompt=null; banner.style.display="none"; });
+
+  window.addEventListener("appinstalled",()=>{
+    deferredInstallPrompt=null;
+    banner.style.display="none";
+  });
 }
 window.addEventListener("DOMContentLoaded",()=>{
   restoreAuthorizationLocalStorage();
