@@ -197,9 +197,10 @@ body:has(.documents-portal.open) .saved-card{display:none}
 
 .profile-upload-row{display:flex;gap:12px;align-items:flex-start;flex-wrap:wrap}.profile-upload-box{flex:1;min-width:210px;background:#f8fafc;border:1px solid #d9e0e8;border-radius:12px;padding:12px}.profile-preview{width:100%;height:92px;object-fit:contain;background:#fff;border:1px dashed #cbd5e1;border-radius:10px;margin-top:8px}.profile-upload-actions{display:flex;gap:7px;flex-wrap:wrap;margin-top:8px}.profile-file-input{width:100%}
 .master-terms-editor-list{display:grid;gap:10px}
-.master-term-box{display:flex;align-items:flex-start;gap:10px;background:#f8fafc;border:1px solid #d9e0e8;border-radius:12px;padding:10px}
-.master-term-number{width:32px;height:32px;min-width:32px;border-radius:9px;background:#14213d;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px;margin-top:1px}
-.master-term-input{flex:1;min-width:0;min-height:200px;border:1px solid #cfd7e2;border-radius:9px;padding:9px 10px;font:inherit;resize:vertical;background:#fff;box-sizing:border-box;width:100%}
+.master-term-box{display:grid;grid-template-columns:32px minmax(0,1fr);grid-template-rows:auto auto;align-items:start;gap:10px;background:#f8fafc;border:1px solid #d9e0e8;border-radius:12px;padding:10px;box-sizing:border-box;width:100%}
+.master-term-number{grid-column:1;grid-row:1;width:32px;height:32px;min-width:32px;border-radius:9px;background:#14213d;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px;margin-top:1px}
+.master-term-input{grid-column:1 / -1;grid-row:2;display:block;flex:none;min-width:0;min-height:100px;width:100%;border:1px solid #cfd7e2;border-radius:9px;padding:12px 10px;font:inherit;resize:vertical;background:#fff;box-sizing:border-box}
+.master-term-box > .term-style-controls{grid-column:2;grid-row:1;display:flex !important;align-items:center;gap:6px;flex-wrap:wrap;min-width:0;width:100%}
 .master-term-delete{min-width:34px;height:34px;padding:0;border-radius:9px}
 .term-row{position:relative;padding-left:42px}.term-style-controls{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:7px}.term-style-btn{min-width:34px;height:32px;padding:0 8px;border-radius:8px}.term-style-btn.active{background:#14213d;color:#fff;border-color:#14213d}.term-size-label{font-size:12px;font-weight:700;color:#596273;min-width:44px;text-align:center}
 .term-row::before{content:counter(terms);counter-increment:terms;position:absolute;left:0;top:2px;width:32px;height:32px;border-radius:9px;background:#14213d;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px}
@@ -270,11 +271,11 @@ body:has(.documents-portal.open) .saved-card{display:none}
 }
 #termsList .actual-term-textarea{
   display:block !important;
-  flex:1 1 auto !important;
   width:100% !important;
   min-width:0 !important;
-  min-height:200px !important;
-  height:auto !important;
+  min-height:110px !important;
+  height:110px !important;
+  margin:0 !important;
   padding:12px !important;
   border:1px solid #cfd7e2 !important;
   border-radius:9px !important;
@@ -294,6 +295,17 @@ body:has(.documents-portal.open) .saved-card{display:none}
   padding-top:9px !important;
   border-top:1px solid #e5e7eb !important;
 }
+.term-history-btn{
+  min-width:38px !important;
+  height:32px !important;
+  padding:0 9px !important;
+  font-weight:800 !important;
+}
+.term-history-btn:disabled{
+  opacity:.45 !important;
+  cursor:not-allowed !important;
+}
+
 #termsList .actual-term-formatting{
   display:flex !important;
   flex-wrap:wrap !important;
@@ -310,7 +322,8 @@ body:has(.documents-portal.open) .saved-card{display:none}
   #termsList .actual-term-editor-row{padding:10px !important}
   #termsList .actual-term-writing-row{gap:8px !important}
   #termsList .actual-term-textarea{
-    min-height:200px !important;
+    min-height:110px !important;
+    height:110px !important;
     font-size:16px !important;
     line-height:1.5 !important;
   }
@@ -321,112 +334,134 @@ body:has(.documents-portal.open) .saved-card{display:none}
 }
 
 
-/* === PROFESSIONAL COMPACT TERMS & CONDITIONS EDITOR === */
-#termsSettingsCard .terms-editor-header{
-  display:flex !important;
-  align-items:center !important;
-  justify-content:space-between !important;
-  gap:8px !important;
-  flex-wrap:wrap !important;
-  margin-bottom:10px !important;
-  padding-bottom:8px !important;
-  border-bottom:1px solid #e8edf3 !important;
-}
-#termsSettingsCard .terms-history-actions{
-  display:flex !important;
-  align-items:center !important;
-  gap:5px !important;
-  flex-wrap:nowrap !important;
-}
-#termsSettingsCard .terms-history-btn{
-  height:32px !important;
-  padding:0 10px !important;
-  white-space:nowrap !important;
-  border-radius:8px !important;
-}
-#masterTermsEditorList{
-  display:grid !important;
-  gap:8px !important;
-}
-#masterTermsEditorList .master-term-box{
-  display:flex !important;
-  flex-direction:column !important;
-  align-items:stretch !important;
-  gap:6px !important;
-  width:100% !important;
-  min-width:0 !important;
-  padding:8px !important;
-  margin:0 !important;
-  box-sizing:border-box !important;
-}
-#masterTermsEditorList .master-term-toolbar{
-  display:flex !important;
-  align-items:center !important;
-  gap:5px !important;
-  width:100% !important;
-  min-width:0 !important;
-  overflow-x:auto !important;
-  overflow-y:hidden !important;
-  flex-wrap:nowrap !important;
-  white-space:nowrap !important;
-  scrollbar-width:none !important;
-}
-#masterTermsEditorList .master-term-toolbar::-webkit-scrollbar{display:none !important}
-#masterTermsEditorList .master-term-number{
-  flex:0 0 28px !important;
-  width:28px !important;
-  height:28px !important;
-  min-width:28px !important;
-  margin:0 !important;
-}
-#masterTermsEditorList .master-term-toolbar button{
-  flex:0 0 auto !important;
-  height:28px !important;
-  min-height:28px !important;
-  padding:0 8px !important;
-  border-radius:7px !important;
-}
-#masterTermsEditorList .master-term-toolbar label{
-  flex:0 0 auto !important;
-  height:28px !important;
-  display:flex !important;
-  align-items:center !important;
-  gap:4px !important;
-  padding:0 7px !important;
-  border:1px solid #dbe2ea !important;
-  border-radius:7px !important;
-  background:#fff !important;
-  font-size:11px !important;
-}
-#masterTermsEditorList .master-term-toolbar input[type="color"]{
-  flex:0 0 28px !important;
-  width:28px !important;
-  height:28px !important;
-  padding:2px !important;
-}
-#masterTermsEditorList .master-term-input{
-  display:block !important;
-  width:100% !important;
-  min-width:0 !important;
-  height:36px !important;
-  min-height:36px !important;
-  max-height:36px !important;
-  resize:none !important;
-  box-sizing:border-box !important;
-  padding:7px 10px !important;
-  line-height:20px !important;
-  overflow-x:auto !important;
-  overflow-y:hidden !important;
-  white-space:nowrap !important;
-}
+/* === TERMS MASTER BOX: MOBILE FULL-WIDTH WRITING AREA === */
 @media(max-width:700px){
-  #termsSettingsCard .terms-editor-header{align-items:center !important}
-  #termsSettingsCard .terms-history-actions{width:100% !important}
-  #termsSettingsCard .terms-history-btn{flex:1 1 0 !important}
-  #masterTermsEditorList .master-term-box{padding:7px !important}
-  #masterTermsEditorList .master-term-toolbar{padding-bottom:1px !important}
+  .master-term-box{
+    display:grid !important;
+    grid-template-columns:28px minmax(0,1fr) !important;
+    grid-template-rows:auto auto !important;
+    width:100% !important;
+    gap:8px !important;
+    box-sizing:border-box !important;
+  }
+  .master-term-number{
+    grid-column:1 !important;
+    grid-row:1 !important;
+    width:28px !important;
+    min-width:28px !important;
+  }
+  .master-term-box > .term-style-controls{
+    grid-column:2 !important;
+    grid-row:1 !important;
+    width:100% !important;
+    min-width:0 !important;
+  }
+  .master-term-input{
+    grid-column:1 / -1 !important;
+    grid-row:2 !important;
+    width:100% !important;
+    min-width:0 !important;
+    min-height:100px !important;
+    box-sizing:border-box !important;
+  }
 }
 
+
+/* === TERMS COMPACT PROFESSIONAL TOOLBAR === */
+#termsList .actual-term-toolbar{
+  flex-wrap:nowrap !important;
+  gap:4px !important;
+  padding-top:6px !important;
+  overflow:hidden !important;
+}
+#termsList .actual-term-formatting{
+  flex-wrap:nowrap !important;
+  gap:3px !important;
+  min-width:0 !important;
+  flex:1 1 auto !important;
+  overflow:hidden !important;
+}
+#termsList .actual-term-order{
+  flex:0 0 auto !important;
+  gap:3px !important;
+  margin-left:0 !important;
+}
+#termsList .term-history-btn,
+#termsList .term-style-btn,
+#termsList .term-move{
+  min-width:27px !important;
+  width:27px !important;
+  height:29px !important;
+  padding:0 !important;
+  flex:0 0 27px !important;
+  font-size:13px !important;
+}
+#termsList .term-remove{
+  min-width:48px !important;
+  width:48px !important;
+  height:29px !important;
+  padding:0 5px !important;
+  flex:0 0 48px !important;
+  font-size:11px !important;
+}
+#termsList .term-size-label{
+  min-width:18px !important;
+  width:18px !important;
+  font-size:10px !important;
+}
+#termsList .term-highlight{
+  display:flex !important;
+  align-items:center !important;
+  gap:3px !important;
+  flex:0 0 auto !important;
+  white-space:nowrap !important;
+}
+#termsList .term-highlight label{
+  gap:2px !important;
+  font-size:10px !important;
+}
+#termsList .term-color-btn{
+  width:27px !important;
+  min-width:27px !important;
+  height:29px !important;
+  padding:0 !important;
+  justify-content:center !important;
+}
+#termsList .term-color-btn .color-name{display:none !important}
+#termsList .actual-term-textarea{
+  min-height:80px !important;
+  height:80px !important;
+  padding:8px 10px !important;
+  line-height:1.35 !important;
+}
+@media(max-width:700px){
+  #termsList .actual-term-toolbar{
+    justify-content:flex-start !important;
+    gap:2px !important;
+  }
+  #termsList .actual-term-formatting{gap:2px !important}
+  #termsList .actual-term-order{gap:2px !important}
+  #termsList .term-history-btn,
+  #termsList .term-style-btn,
+  #termsList .term-move,
+  #termsList .term-color-btn{
+    min-width:25px !important;
+    width:25px !important;
+    height:27px !important;
+    flex-basis:25px !important;
+    font-size:12px !important;
+  }
+  #termsList .term-remove{
+    min-width:44px !important;
+    width:44px !important;
+    height:27px !important;
+    flex-basis:44px !important;
+    font-size:10px !important;
+  }
+  #termsList .term-size-label{min-width:16px !important;width:16px !important;font-size:9px !important}
+  #termsList .term-highlight label{font-size:9px !important}
+  #termsList .actual-term-textarea{min-height:80px !important;height:80px !important;font-size:15px !important}
+}
 </style>
 </head>
 <body>
@@ -576,17 +611,8 @@ body:has(.documents-portal.open) .saved-card{display:none}
 <span class="hint" id="materialSettingsStatus" style="align-self:center"></span>
 </div>
 </div><div class="card" id="termsSettingsCard" style="margin-top:14px">
-<div class="terms-editor-header">
-  <div>
-    <h3 style="margin:0">Terms &amp; Conditions</h3>
-    <p class="sub" style="margin:3px 0 0">Manage the default Terms &amp; Conditions. These terms will be applied automatically to newly created documents.</p>
-  </div>
-  <div class="terms-history-actions">
-    <button type="button" class="btn secondary terms-history-btn" id="termsUndoBtn" onclick="undoMasterTerms()" disabled title="Undo last Terms & Conditions change">↶ Undo</button>
-    <button type="button" class="btn secondary terms-history-btn" id="termsRedoBtn" onclick="redoMasterTerms()" disabled title="Redo Terms & Conditions change">↷ Redo</button>
-    <button type="button" class="btn secondary terms-history-btn" onclick="addMasterTermBox()" title="Add a new Terms & Conditions line">+ Add Condition</button>
-  </div>
-</div>
+<h3 style="margin-top:0">Terms &amp; Conditions</h3>
+<p class="sub" style="margin-bottom:10px">Manage the default Terms &amp; Conditions. These terms will be applied automatically to newly created documents.</p>
 <div class="master-terms-editor-list" id="masterTermsEditorList"></div>
 <div id="termsAuthControl" class="card" style="margin-top:12px;background:#f8fafc">
   <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
@@ -612,6 +638,7 @@ body:has(.documents-portal.open) .saved-card{display:none}
 <p class="hint" style="margin:7px 0 0">Adjust the Terms &amp; Conditions text size used in generated PDFs.</p>
 </div>
 <div class="actions" style="margin-top:10px">
+<button class="btn secondary" onclick="addMasterTermBox()" type="button">+ Add Term</button>
 <button class="btn secondary" onclick="saveMasterTerms()" type="button">Save Terms &amp; Conditions</button>
 <span class="hint" id="termsSettingsStatus" style="align-self:center"></span>
 </div>
@@ -1131,104 +1158,17 @@ function getMasterTermData(){
 function getMasterTerms(){
   return getMasterTermData().map(x=>x.text).filter(Boolean);
 }
-let termsHistoryStack=[];
-let termsRedoStack=[];
-let termsHistorySuspended=false;
-let termsEditSnapshot=null;
-
-function captureMasterTermsState(){
-  return JSON.stringify([...document.querySelectorAll("#masterTermsEditorList .master-term-box")].map(row=>({
-    text:row.querySelector(".master-term-input")?.value||"",
-    highlight:row.dataset.highlight==="1",
-    highlightColor:row.dataset.highlightColor||"#fff3a3",
-    bold:row.dataset.bold==="1",
-    italic:row.dataset.italic==="1",
-    fontSize:Math.min(16,Math.max(7,parseInt(row.dataset.fontSize||getTermsFontSize(),10)||9))
-  })));
-}
-function updateTermsHistoryButtons(){
-  const undo=document.getElementById("termsUndoBtn");
-  const redo=document.getElementById("termsRedoBtn");
-  if(undo) undo.disabled=termsHistoryStack.length===0;
-  if(redo) redo.disabled=termsRedoStack.length===0;
-}
-function resetTermsHistory(){
-  termsHistoryStack=[];
-  termsRedoStack=[];
-  termsEditSnapshot=null;
-  updateTermsHistoryButtons();
-}
-function recordTermsHistory(){
-  if(termsHistorySuspended) return;
-  const state=captureMasterTermsState();
-  const last=termsHistoryStack.length?termsHistoryStack[termsHistoryStack.length-1]:null;
-  if(state===last) return;
-  termsHistoryStack.push(state);
-  if(termsHistoryStack.length>50) termsHistoryStack.shift();
-  termsRedoStack=[];
-  updateTermsHistoryButtons();
-}
-function restoreMasterTermsState(state){
-  let data=[];
-  try{ data=JSON.parse(state||"[]"); }catch(e){ data=[]; }
-  const box=document.getElementById("masterTermsEditorList");
-  if(!box) return;
-  termsHistorySuspended=true;
-  box.innerHTML="";
-  (Array.isArray(data)?data:[]).forEach(t=>addMasterTermBox(t,false));
-  if(!box.querySelector(".master-term-box")) addMasterTermBox("",false);
-  refreshMasterTermNumbers();
-  termsHistorySuspended=false;
-  applyTermsAuthLock();
-  updateTermsHistoryButtons();
-}
-function undoMasterTerms(){
-  if(!termsHistoryStack.length) return;
-  const current=captureMasterTermsState();
-  const previous=termsHistoryStack.pop();
-  if(current!==previous) termsRedoStack.push(current);
-  restoreMasterTermsState(previous);
-  updateTermsHistoryButtons();
-}
-function redoMasterTerms(){
-  if(!termsRedoStack.length) return;
-  const current=captureMasterTermsState();
-  const next=termsRedoStack.pop();
-  if(current!==next) termsHistoryStack.push(current);
-  restoreMasterTermsState(next);
-  updateTermsHistoryButtons();
-}
-function beginTermTextEdit(input){
-  termsEditSnapshot=captureMasterTermsState();
-}
-function finishTermTextEdit(input){
-  if(termsHistorySuspended) return;
-  const before=termsEditSnapshot;
-  const after=captureMasterTermsState();
-  termsEditSnapshot=null;
-  if(before && before!==after){
-    termsHistoryStack.push(before);
-    if(termsHistoryStack.length>50) termsHistoryStack.shift();
-    termsRedoStack=[];
-    updateTermsHistoryButtons();
-  }
-}
 function loadMasterTermsSettings(){
   const box=document.getElementById("masterTermsEditorList");
   if(!box) return;
-  termsHistorySuspended=true;
   box.innerHTML="";
-  getMasterTermData().forEach(t=>addMasterTermBox(t,false));
-  if(!box.querySelector(".master-term-box")) addMasterTermBox("",false);
+  getMasterTermData().forEach(t=>addMasterTermBox(t));
   refreshMasterTermNumbers();
-  termsHistorySuspended=false;
-  resetTermsHistory();
   applyTermsAuthLock();
 }
-function addMasterTermBox(value="", recordHistory=true){
+function addMasterTermBox(value=""){
   const box=document.getElementById("masterTermsEditorList");
   if(!box) return;
-  if(recordHistory && !termsHistorySuspended) recordTermsHistory();
   const t=normalizeMasterTerm(value);
   const row=document.createElement("div");
   row.className="master-term-box";
@@ -1237,47 +1177,42 @@ function addMasterTermBox(value="", recordHistory=true){
   row.dataset.bold=t.bold?"1":"0";
   row.dataset.italic=t.italic?"1":"0";
   row.dataset.fontSize=String(t.fontSize);
-  row.innerHTML=`<div class="master-term-toolbar">
-      <div class="master-term-number"></div>
+  row.innerHTML=`<div class="master-term-number"></div>
+    <textarea class="master-term-input" rows="8" placeholder="Enter Terms & Conditions">${esc(t.text)}</textarea>
+    <div class="term-style-controls" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
       <button type="button" class="btn secondary term-master-bold ${t.bold?"active":""}" onclick="toggleMasterTermStyle(this,'bold')" title="Bold">B</button>
       <button type="button" class="btn secondary term-master-italic ${t.italic?"active":""}" onclick="toggleMasterTermStyle(this,'italic')" title="Italic"><i>I</i></button>
-      <label title="Highlight"><input type="checkbox" class="term-master-highlight" ${t.highlight?"checked":""} onchange="toggleMasterTermHighlight(this)"> Highlight</label>
+      <label style="display:flex;align-items:center;gap:4px;font-size:12px;font-weight:700">
+        <input type="checkbox" class="term-master-highlight" ${t.highlight?"checked":""} onchange="toggleMasterTermHighlight(this)"> Highlight
+      </label>
       <input type="color" class="term-master-color" value="${t.highlightColor}" onchange="setMasterTermColor(this)" title="Highlight color">
       <button type="button" class="btn secondary" onclick="moveMasterTerm(this,-1)" title="Move up">↑</button>
       <button type="button" class="btn secondary" onclick="moveMasterTerm(this,1)" title="Move down">↓</button>
       <button type="button" class="btn danger master-term-delete" title="Remove term" aria-label="Remove term" onclick="removeMasterTermBox(this)">Remove</button>
-    </div>
-    <input class="master-term-input" type="text" value="${esc(t.text)}" placeholder="Enter terms & conditions line..."
-      onfocus="beginTermTextEdit(this)" onblur="finishTermTextEdit(this)">`;
+    </div>`;
   box.appendChild(row);
   refreshMasterTermNumbers();
   applyTermsAuthLock();
-  updateTermsHistoryButtons();
 }
 function removeMasterTermBox(btn){
-  if(isTermsAuthLocked()) return;
-  recordTermsHistory();
   const box=document.getElementById("masterTermsEditorList");
   const row=btn.closest(".master-term-box");
   if(row) row.remove();
-  if(box && !box.querySelector(".master-term-box")) addMasterTermBox("",false);
+  if(box && !box.querySelector(".master-term-box")) addMasterTermBox("");
   refreshMasterTermNumbers();
 }
 function refreshMasterTermNumbers(){
-  const rows=[...document.querySelectorAll("#masterTermsEditorList .master-term-box")];
-  rows.forEach((row,i)=>{
+  document.querySelectorAll("#masterTermsEditorList .master-term-box").forEach((row,i)=>{
     const n=row.querySelector(".master-term-number");
     if(n) n.textContent=String(i+1);
     const moves=row.querySelectorAll("button[onclick^='moveMasterTerm']");
     if(moves.length>=2){
       moves[0].disabled=i===0;
-      moves[1].disabled=i===rows.length-1;
+      moves[1].disabled=i===document.querySelectorAll("#masterTermsEditorList .master-term-box").length-1;
     }
   });
 }
 function toggleMasterTermStyle(btn,kind){
-  if(isTermsAuthLocked()) return;
-  recordTermsHistory();
   const row=btn.closest(".master-term-box");
   const key=kind==="bold"?"bold":"italic";
   const active=row.dataset[key]!=="1";
@@ -1285,14 +1220,10 @@ function toggleMasterTermStyle(btn,kind){
   btn.classList.toggle("active",active);
 }
 function toggleMasterTermHighlight(check){
-  if(isTermsAuthLocked()) return;
-  recordTermsHistory();
   const row=check.closest(".master-term-box");
   row.dataset.highlight=check.checked?"1":"0";
 }
 function setMasterTermColor(input){
-  if(isTermsAuthLocked()) return;
-  recordTermsHistory();
   const row=input.closest(".master-term-box");
   row.dataset.highlightColor=input.value;
   const check=row.querySelector(".term-master-highlight");
@@ -1303,14 +1234,10 @@ function moveMasterTerm(btn,direction){
   if(isTermsAuthLocked()) return;
   const row=btn.closest(".master-term-box");
   const box=document.getElementById("masterTermsEditorList");
-  if(!row || !box) return;
-  if((direction<0 && !row.previousElementSibling)||(direction>0 && !row.nextElementSibling)) return;
-  recordTermsHistory();
-  if(direction<0) box.insertBefore(row,row.previousElementSibling);
-  if(direction>0) box.insertBefore(row.nextElementSibling,row);
+  if(direction<0 && row.previousElementSibling) box.insertBefore(row,row.previousElementSibling);
+  if(direction>0 && row.nextElementSibling) box.insertBefore(row.nextElementSibling,row);
   refreshMasterTermNumbers();
 }
-
 function saveMasterTerms(){
   if(isTermsAuthLocked()) return;
   const rows=[...document.querySelectorAll("#masterTermsEditorList .master-term-box")];
@@ -1334,7 +1261,6 @@ function saveMasterTerms(){
     terms.forEach(t=>addTerm(t.text,t.highlight,t.highlightColor,t.bold,t.italic,t.fontSize));
   }
   const st=document.getElementById("termsSettingsStatus"); if(st) st.textContent="Terms & Conditions saved.";
-  updateTermsHistoryButtons();
 }
 function isTermsAuthLocked(){
   return localStorage.getItem("termsAuthLocked")==="true";
@@ -1378,13 +1304,10 @@ function addTerm(value="", highlight=false, highlightColor="#fff3a3", bold=false
   const selectedName=(colors.find(x=>x[0]===highlightColor)||[highlightColor,"Color"])[1];
 
   row.innerHTML=`
-    <div class="actual-term-writing-row">
-      <span class="actual-term-number">${[...document.querySelectorAll("#termsList .actual-term-editor-row")].length + 1}</span>
-      <textarea class="term-input actual-term-textarea" rows="8" placeholder="Term & Condition likhein...">${esc(value)}</textarea>
-    </div>
-
     <div class="actual-term-toolbar">
       <div class="actual-term-formatting">
+        <button type="button" class="btn secondary term-history-btn term-undo" onclick="undoTerm(this)" title="Undo" aria-label="Undo">↶</button>
+        <button type="button" class="btn secondary term-history-btn term-redo" onclick="redoTerm(this)" title="Redo" aria-label="Redo">↷</button>
         <button type="button" class="btn secondary term-style-btn ${bold?"active":""}" onclick="toggleTermStyle(this,'bold')" title="Bold">B</button>
         <button type="button" class="btn secondary term-style-btn ${italic?"active":""}" onclick="toggleTermStyle(this,'italic')" title="Italic"><i>I</i></button>
         <button type="button" class="btn secondary term-style-btn" onclick="changeTermRowFontSize(this,-1)" title="Decrease font size">A−</button>
@@ -1410,10 +1333,76 @@ function addTerm(value="", highlight=false, highlightColor="#fff3a3", bold=false
         <button type="button" class="btn secondary term-move" onclick="moveTerm(this,1)" title="Move down">↓</button>
         <button type="button" class="btn danger term-remove" onclick="removeTerm(this)">Remove</button>
       </div>
+    </div>
+
+    <div class="actual-term-writing-row">
+      <span class="actual-term-number">${[...document.querySelectorAll("#termsList .actual-term-editor-row")].length + 1}</span>
+      <textarea class="term-input actual-term-textarea" rows="5" placeholder="Enter Term & Condition...">${esc(value)}</textarea>
     </div>`;
 
   box.appendChild(row);
+  const ta=row.querySelector('.actual-term-textarea');
+  initTermHistory(ta);
   refreshTermButtons();
+}
+
+const termHistory = new WeakMap();
+
+function initTermHistory(textarea){
+  if(!textarea) return;
+  termHistory.set(textarea,{past:[],future:[]});
+  textarea.addEventListener('input',()=>{
+    const h=termHistory.get(textarea);
+    if(!h) return;
+    const current=textarea.value;
+    const previous=h.lastValue ?? '';
+    if(current!==previous){
+      h.past.push(previous);
+      if(h.past.length>50) h.past.shift();
+      h.future=[];
+      h.lastValue=current;
+      updateTermHistoryButtons(textarea);
+    }
+  });
+  const h=termHistory.get(textarea);
+  h.lastValue=textarea.value;
+  updateTermHistoryButtons(textarea);
+}
+
+function updateTermHistoryButtons(textarea){
+  const row=textarea?.closest('.term-row');
+  const h=textarea ? termHistory.get(textarea) : null;
+  if(!row || !h) return;
+  const u=row.querySelector('.term-undo');
+  const r=row.querySelector('.term-redo');
+  if(u) u.disabled=h.past.length===0;
+  if(r) r.disabled=h.future.length===0;
+}
+
+function undoTerm(btn){
+  const row=btn.closest('.term-row');
+  const ta=row?.querySelector('.actual-term-textarea');
+  const h=ta ? termHistory.get(ta) : null;
+  if(!ta || !h || !h.past.length) return;
+  h.future.push(ta.value);
+  ta.value=h.past.pop();
+  h.lastValue=ta.value;
+  ta.dispatchEvent(new Event('input',{bubbles:true}));
+  updateTermHistoryButtons(ta);
+  ta.focus();
+}
+
+function redoTerm(btn){
+  const row=btn.closest('.term-row');
+  const ta=row?.querySelector('.actual-term-textarea');
+  const h=ta ? termHistory.get(ta) : null;
+  if(!ta || !h || !h.future.length) return;
+  h.past.push(ta.value);
+  ta.value=h.future.pop();
+  h.lastValue=ta.value;
+  ta.dispatchEvent(new Event('input',{bubbles:true}));
+  updateTermHistoryButtons(ta);
+  ta.focus();
 }
 
 function toggleTermStyle(btn,kind){
