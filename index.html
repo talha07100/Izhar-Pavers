@@ -2064,30 +2064,51 @@ function isOwnerAccount(user=cloudUser){
 }
 function mirrorAuthorizationLocalStorage(){
   try{
+    const owner=getCurrentOwnerEmail();
+    const emails=[...new Set([owner,...(authorizationConfig.authorizedEmails||[]).map(normalizeEmail).filter(Boolean)])];
     localStorage.setItem("site_authorization_status", authorizationConfig.enabled ? "true" : "false");
-    localStorage.setItem("authorized_users_list", JSON.stringify([...new Set((authorizationConfig.authorizedEmails||[]).map(normalizeEmail).filter(Boolean))]));
-  }catch(e){}
+    localStorage.setItem("authorized_users_list", JSON.stringify(emails));
+    localStorage.setItem("izhar_pavers_authorization_config_v1", JSON.stringify({
+      ownerEmail:owner,
+      enabled:authorizationConfig.enabled===true,
+      authorizedEmails:emails,
+      updatedAt:String(authorizationConfig.updatedAt||new Date().toISOString())
+    }));
+  }catch(e){ console.warn("Authorization local save failed:",e); }
 }
 function restoreAuthorizationLocalStorage(){
   try{
+    const cached=JSON.parse(localStorage.getItem("izhar_pavers_authorization_config_v1")||"null");
+    if(cached && typeof cached.enabled!=="undefined"){
+      authorizationConfig={
+        ownerEmail:normalizeEmail(cached.ownerEmail)||BOOTSTRAP_OWNER_EMAIL,
+        enabled:cached.enabled===true,
+        authorizedEmails:Array.isArray(cached.authorizedEmails)?cached.authorizedEmails.map(normalizeEmail).filter(Boolean):[],
+        updatedAt:String(cached.updatedAt||"")
+      };
+    }
     const savedStatus=localStorage.getItem("site_authorization_status");
     const savedUsers=JSON.parse(localStorage.getItem("authorized_users_list")||"null");
+    const owner=getCurrentOwnerEmail()||BOOTSTRAP_OWNER_EMAIL;
     if(savedStatus!==null) authorizationConfig.enabled=(savedStatus==="true");
-    if(Array.isArray(savedUsers) && savedUsers.length){
-      const owner=getCurrentOwnerEmail();
+    if(Array.isArray(savedUsers)){
       authorizationConfig.authorizedEmails=[...new Set([owner,...savedUsers.map(normalizeEmail).filter(Boolean)])];
+    }else{
+      authorizationConfig.authorizedEmails=[...new Set([owner,...(authorizationConfig.authorizedEmails||[]).map(normalizeEmail).filter(Boolean)])];
     }
-  }catch(e){}
+  }catch(e){ console.warn("Authorization local restore failed:",e); }
 }
 function renderAuthorizationList(){
   const list=document.getElementById("authorizationList");
-  if(!list || !isOwnerAccount()) return;
-  const owner=getCurrentOwnerEmail();
+  if(!list)return;
+  const owner=getCurrentOwnerEmail()||BOOTSTRAP_OWNER_EMAIL;
   const emails=[...new Set([owner,...(authorizationConfig.authorizedEmails||[]).map(normalizeEmail).filter(Boolean)])];
+  authorizationConfig.authorizedEmails=emails;
   list.innerHTML=emails.map(email=>{
     const safe=escapeHtml(email);
     const encoded=encodeURIComponent(email);
-    return `<div class="auth-item"><span>${safe}${email===owner?' <strong>(Admin)</strong>':''}</span>${email===owner?'':'<button type="button" onclick="removeAuthorizedEmail(decodeURIComponent(\''+encoded+'\'))">Delete</button>'}</div>`;
+    const isOwnerEmail=email===owner;
+    return `<div class="auth-item"><span>${safe}${isOwnerEmail?' <strong>(Admin)</strong>':''}</span>${isOwnerEmail?'':'<button type="button" onclick="removeAuthorizedEmail(decodeURIComponent(\''+encoded+'\'))">Delete</button>'}</div>`;
   }).join("");
 }
 function renderAuthorizationUI(){
@@ -2100,67 +2121,62 @@ function renderAuthorizationUI(){
   const ownerLabel=document.querySelector("#authorizationCard .auth-note strong"); if(ownerLabel) ownerLabel.textContent=currentOwner;
   const ownerEmailEl=document.getElementById("currentOwnerEmail"); if(ownerEmailEl) ownerEmailEl.textContent=currentOwner;
   const cb=document.getElementById("authorizationEnabled"); if(cb) cb.checked=!!authorizationConfig.enabled;
-  const menuBtn=document.getElementById("mobileAuthorizationBtn"); if(menuBtn) menuBtn.style.display=isOwner ? "block" : "none";
+  const menuBtn=document.getElementById("mobileAuthorizationBtn"); if(menuBtn) menuBtn.style.display=isOwner?"block":"none";
   const navAuth=document.getElementById("settingsNavAuthorization"); if(navAuth) navAuth.style.display=isOwner?"block":"none";
   const navOwner=document.getElementById("settingsNavOwnership"); if(navOwner) navOwner.style.display=isOwner?"block":"none";
   renderAuthorizationList();
 }
+function persistAuthorizationLocally(){
+  authorizationConfig.ownerEmail=normalizeEmail(authorizationConfig.ownerEmail)||BOOTSTRAP_OWNER_EMAIL;
+  authorizationConfig.authorizedEmails=[...new Set([authorizationConfig.ownerEmail,...(authorizationConfig.authorizedEmails||[]).map(normalizeEmail).filter(Boolean)])];
+  if(!authorizationConfig.updatedAt) authorizationConfig.updatedAt=new Date().toISOString();
+  mirrorAuthorizationLocalStorage();
+  renderAuthorizationUI();
+}
 function openAuthorizationSettings(){
   if(!isOwnerAccount()){ setCloudMessage("Only the app owner can manage authorization."); return; }
+  persistAuthorizationLocally();
   toggleSettings(true);
-  setTimeout(()=>{ const el=document.getElementById("authorizationCard"); if(el){el.scrollIntoView({behavior:"smooth",block:"start"});} },80);
+  setTimeout(()=>{ const el=document.getElementById("authorizationCard"); if(el) el.scrollIntoView({behavior:"smooth",block:"start"}); },80);
 }
 window.openAuthorizationSettings=openAuthorizationSettings;
 async function saveAuthorizationConfig(){
   if(!isOwnerAccount()) throw new Error("Only the current admin can change authorization.");
   const currentOwner=getCurrentOwnerEmail();
-  const updatedAt=new Date().toISOString();
   authorizationConfig={
     ownerEmail:currentOwner,
     enabled:authorizationConfig.enabled===true,
     authorizedEmails:[...new Set([currentOwner,...(authorizationConfig.authorizedEmails||[]).map(normalizeEmail).filter(Boolean)])],
-    updatedAt
+    updatedAt:new Date().toISOString()
   };
-  // Always keep the latest setting/list on this device first.
-  localStorage.setItem("izhar_pavers_authorization_config_v1",JSON.stringify(authorizationConfig));
-  mirrorAuthorizationLocalStorage();
-  renderAuthorizationUI();
+  persistAuthorizationLocally();
   if(!cloudDb) throw new Error("Cloud connection is not ready. The setting is saved locally and will sync when Firebase reconnects.");
   const ref=doc(cloudDb,"appConfig","authorization");
-  // Do not let a slow Firestore request freeze the Authorization screen.
   await withTimeout(
-    setDoc(ref,{ownerEmail:authorizationConfig.ownerEmail,enabled:authorizationConfig.enabled,authorizedEmails:authorizationConfig.authorizedEmails,updatedAt},{merge:true}),
+    setDoc(ref,{
+      ownerEmail:authorizationConfig.ownerEmail,
+      enabled:authorizationConfig.enabled,
+      authorizedEmails:authorizationConfig.authorizedEmails,
+      updatedAt:authorizationConfig.updatedAt
+    },{merge:true}),
     8000,
     "Authorization cloud save"
   );
+  // Keep the exact just-saved state on screen. Do not immediately reload an
+  // older cached snapshot over the freshly saved list.
+  persistAuthorizationLocally();
   return true;
 }
 async function retrySaveAuthorizationConfig(){
-  if(!isOwnerAccount() || !cloudDb) return;
+  if(!isOwnerAccount()||!cloudDb)return;
   try{ await saveAuthorizationConfig(); }catch(e){ console.warn("Authorization cloud retry failed:",e); }
 }
-
 async function loadAuthorizationConfig(){
-  let localUpdatedAt="";
-  try{
-    const cached=JSON.parse(localStorage.getItem("izhar_pavers_authorization_config_v1")||"null");
-    if(cached && typeof cached.enabled!=="undefined"){
-      localUpdatedAt=String(cached.updatedAt||"");
-      authorizationConfig={
-        ownerEmail:normalizeEmail(cached.ownerEmail)||BOOTSTRAP_OWNER_EMAIL,
-        enabled:cached.enabled===true,
-        authorizedEmails:Array.isArray(cached.authorizedEmails)?cached.authorizedEmails.map(normalizeEmail).filter(Boolean):[normalizeEmail(cached.ownerEmail)||BOOTSTRAP_OWNER_EMAIL],
-        updatedAt:localUpdatedAt
-      };
-    }
-  }catch(e){}
-
-  // Mirror the simple localStorage keys as a second local persistence layer.
+  // Restore the device state first, including the list and toggle.
   restoreAuthorizationLocalStorage();
-  mirrorAuthorizationLocalStorage();
-
+  persistAuthorizationLocally();
+  const localUpdatedAt=String(authorizationConfig.updatedAt||"");
   if(!cloudDb){ renderAuthorizationUI(); return authorizationConfig; }
-
   try{
     const snap=await withTimeout(
       getDoc(doc(cloudDb,"appConfig","authorization")),
@@ -2170,42 +2186,44 @@ async function loadAuthorizationConfig(){
     if(snap.exists()){
       const d=snap.data()||{};
       const cloudUpdatedAt=String(d.updatedAt||"");
-      // Never overwrite a newer local change with an older Firestore value.
-      if(!localUpdatedAt || !cloudUpdatedAt || cloudUpdatedAt>=localUpdatedAt){
+      // Cloud wins only when it is genuinely newer. Never replace a newer local
+      // admin change with an older Firestore copy.
+      const cloudIsNewer=!!cloudUpdatedAt && (!localUpdatedAt || cloudUpdatedAt>=localUpdatedAt);
+      if(cloudIsNewer){
         const owner=normalizeEmail(d.ownerEmail)||BOOTSTRAP_OWNER_EMAIL;
+        const emails=Array.isArray(d.authorizedEmails)?d.authorizedEmails.map(normalizeEmail).filter(Boolean):[];
         authorizationConfig={
           ownerEmail:owner,
           enabled:d.enabled===true,
-          authorizedEmails:Array.isArray(d.authorizedEmails)?d.authorizedEmails.map(normalizeEmail).filter(Boolean):[owner],
-          updatedAt:cloudUpdatedAt||new Date().toISOString()
+          authorizedEmails:[...new Set([owner,...emails])],
+          updatedAt:cloudUpdatedAt
         };
-        if(!authorizationConfig.authorizedEmails.includes(owner)) authorizationConfig.authorizedEmails.unshift(owner);
-        localStorage.setItem("izhar_pavers_authorization_config_v1",JSON.stringify(authorizationConfig));
-      }else if(cloudUser && isOwnerAccount(cloudUser)){
-        // Local is newer; push it back to Firebase in the background.
+        persistAuthorizationLocally();
+      }else if(cloudUser && isOwnerAccount(cloudUser) && localUpdatedAt){
         retrySaveAuthorizationConfig().catch(()=>{});
       }
     }else if(cloudUser && normalizeEmail(cloudUser.email)===BOOTSTRAP_OWNER_EMAIL){
-      const owner=getCurrentOwnerEmail();
-      authorizationConfig={
-        ownerEmail:owner||BOOTSTRAP_OWNER_EMAIL,
-        enabled:authorizationConfig.enabled===true,
-        authorizedEmails:[...new Set([owner||BOOTSTRAP_OWNER_EMAIL,...(authorizationConfig.authorizedEmails||[]).map(normalizeEmail).filter(Boolean)])],
-        updatedAt:localUpdatedAt||new Date().toISOString()
-      };
+      // First-time initialization: create the cloud copy from the existing local state.
+      authorizationConfig.ownerEmail=normalizeEmail(authorizationConfig.ownerEmail)||BOOTSTRAP_OWNER_EMAIL;
+      authorizationConfig.authorizedEmails=[...new Set([authorizationConfig.ownerEmail,...(authorizationConfig.authorizedEmails||[])])];
+      authorizationConfig.updatedAt=localUpdatedAt||new Date().toISOString();
       await withTimeout(
-        setDoc(doc(cloudDb,"appConfig","authorization"),{ownerEmail:authorizationConfig.ownerEmail,enabled:authorizationConfig.enabled,authorizedEmails:authorizationConfig.authorizedEmails,updatedAt:authorizationConfig.updatedAt},{merge:true}),
+        setDoc(doc(cloudDb,"appConfig","authorization"),{
+          ownerEmail:authorizationConfig.ownerEmail,
+          enabled:authorizationConfig.enabled===true,
+          authorizedEmails:authorizationConfig.authorizedEmails,
+          updatedAt:authorizationConfig.updatedAt
+        },{merge:true}),
         8000,
         "Authorization cloud create"
       );
-      localStorage.setItem("izhar_pavers_authorization_config_v1",JSON.stringify(authorizationConfig));
+      persistAuthorizationLocally();
     }
   }catch(e){
     console.warn("Authorization config load delayed:",e);
-    // Keep the locally cached setting/list; never reset Authorization to OFF because
-    // Firestore is temporarily slow or unavailable.
+    // Keep the local state visible and usable when Firestore is temporarily unavailable.
+    persistAuthorizationLocally();
   }
-  mirrorAuthorizationLocalStorage();
   renderAuthorizationUI();
   return authorizationConfig;
 }
@@ -2227,14 +2245,10 @@ async function checkUserAuthorization(user){
   return false;
 }
 window.setAuthorizationEnabled=async function(enabled){
-  if(!isOwnerAccount()){return;}
+  if(!isOwnerAccount())return;
   authorizationConfig.enabled=!!enabled;
   authorizationConfig.updatedAt=new Date().toISOString();
-  // Update the local cache with a NEW timestamp so an older Firestore value
-  // can never overwrite a freshly changed setting on the next page load.
-  localStorage.setItem("izhar_pavers_authorization_config_v1",JSON.stringify(authorizationConfig));
-  mirrorAuthorizationLocalStorage();
-  renderAuthorizationUI();
+  persistAuthorizationLocally();
   try{
     await saveAuthorizationConfig();
     setCloudMessage(enabled?"Authorization is ON. Only approved Gmail accounts can use the app.":"Authorization is OFF. Any Google account can use the app.");
@@ -2250,53 +2264,70 @@ window.addAuthorizedEmail=async function(){
   const emails=[...new Set(raw.split(/[\s,;]+/).map(normalizeEmail).filter(Boolean))];
   const invalid=emails.filter(email=>!/^[-a-z0-9._%+]+@gmail\.com$/i.test(email));
   if(invalid.length){alert("Invalid Gmail address: "+invalid[0]);return;}
-  const before=[...(authorizationConfig.authorizedEmails||[])];
-  const toAdd=emails.filter(email=>email!==getCurrentOwnerEmail() && !before.some(x=>normalizeEmail(x)===email));
+  const owner=getCurrentOwnerEmail();
+  const before=[...(authorizationConfig.authorizedEmails||[]).map(normalizeEmail).filter(Boolean)];
+  const toAdd=emails.filter(email=>email!==owner && !before.includes(email));
   if(!toAdd.length){
-    if(input) input.value="";
-    setCloudMessage("All entered Gmail accounts are already authorized or are the current admin.");
+    if(input)input.value="";
     renderAuthorizationUI();
+    setCloudMessage("All entered Gmail accounts are already authorized or are the current admin.");
     return;
   }
-  authorizationConfig.authorizedEmails=[...new Set([...before,...toAdd])];
-  mirrorAuthorizationLocalStorage();
-  renderAuthorizationUI();
+  authorizationConfig.authorizedEmails=[...new Set([owner,...before,...toAdd])];
+  authorizationConfig.updatedAt=new Date().toISOString();
+  // Show the new row immediately and keep it in local storage before network work starts.
+  persistAuthorizationLocally();
+  if(input)input.value="";
+  setCloudMessage(toAdd.length===1?toAdd[0]+" has been authorized.":toAdd.length+" Gmail accounts have been authorized.");
   try{
     await saveAuthorizationConfig();
-    if(input)input.value="";
-    setCloudMessage(toAdd.length===1 ? toAdd[0]+" has been authorized. You can add another Gmail anytime." : toAdd.length+" Gmail accounts have been authorized.");
+    setCloudMessage(toAdd.length===1?toAdd[0]+" has been authorized and saved.":toAdd.length+" Gmail accounts have been authorized and saved.");
   }catch(e){
-    // Keep the new Gmail visible locally even if Firestore is temporarily unavailable.
-    // A later reconnect/retry will sync the same list to the cloud.
-    renderAuthorizationUI();
-    setCloudMessage(toAdd.join(", ")+" saved locally. Cloud save is pending: "+e.message);
+    setCloudMessage(toAdd.join(", ")+" saved on this device. Cloud save is pending: "+e.message);
   }
 };
 window.removeAuthorizedEmail=async function(email){
-  if(!isOwnerAccount()||email===getCurrentOwnerEmail())return;
-  if(!confirm("Remove authorization for "+email+"?"))return;
-  authorizationConfig.authorizedEmails=authorizationConfig.authorizedEmails.filter(x=>normalizeEmail(x)!==normalizeEmail(email));
-  mirrorAuthorizationLocalStorage();
-  renderAuthorizationUI();
+  if(!isOwnerAccount())return;
+  const target=normalizeEmail(email);
+  const owner=getCurrentOwnerEmail();
+  if(!target||target===owner)return;
+  if(!confirm("Remove authorization for "+target+"?"))return;
+  authorizationConfig.authorizedEmails=(authorizationConfig.authorizedEmails||[]).filter(x=>normalizeEmail(x)!==target);
+  authorizationConfig.updatedAt=new Date().toISOString();
+  // Remove from the UI immediately and persist before the cloud request.
+  persistAuthorizationLocally();
+  setCloudMessage(target+" authorization removed.");
   try{
     await saveAuthorizationConfig();
-    setCloudMessage(email+" authorization removed.");
+    setCloudMessage(target+" authorization removed and saved.");
   }catch(e){
-    // Keep the removal locally; do not bring the deleted Gmail back because of a
-    // temporary cloud/network problem.
-    renderAuthorizationUI();
-    setCloudMessage(email+" removed on this device. Cloud save is pending: "+e.message);
+    setCloudMessage(target+" removed on this device. Cloud save is pending: "+e.message);
   }
 };
 window.refreshAuthorizationSettings=async function(){
   if(!isOwnerAccount()){ setCloudMessage("Only the current admin can manage authorization."); return; }
   if(!cloudDb){ setCloudMessage("Firebase is still connecting. Please wait a moment and try again."); return; }
   try{
-    await loadAuthorizationConfig();
-    renderAuthorizationUI();
+    // Explicit Refresh is the one place where we intentionally read the cloud copy.
+    const snap=await withTimeout(getDoc(doc(cloudDb,"appConfig","authorization")),7000,"Authorization settings load");
+    if(!snap.exists()){
+      setCloudMessage("No authorization settings found in Firebase yet.");
+      renderAuthorizationUI();
+      return;
+    }
+    const d=snap.data()||{};
+    const owner=normalizeEmail(d.ownerEmail)||BOOTSTRAP_OWNER_EMAIL;
+    authorizationConfig={
+      ownerEmail:owner,
+      enabled:d.enabled===true,
+      authorizedEmails:[...new Set([owner,...(Array.isArray(d.authorizedEmails)?d.authorizedEmails.map(normalizeEmail).filter(Boolean):[])])],
+      updatedAt:String(d.updatedAt||new Date().toISOString())
+    };
+    persistAuthorizationLocally();
     setCloudMessage("Authorization settings loaded from Firebase.");
   }catch(e){
     console.error(e);
+    persistAuthorizationLocally();
     setCloudMessage("Unable to load authorization settings: "+(e?.message||e));
   }
 };
@@ -2313,9 +2344,8 @@ window.transferAdminOwnership=async function(){
   const newEmails=[...new Set([newOwner,...(authorizationConfig.authorizedEmails||[]).map(normalizeEmail).filter(Boolean).filter(e=>e!==oldOwner)])];
   try{
     await setDoc(doc(cloudDb,"appConfig","authorization"),{ownerEmail:newOwner,enabled:!!authorizationConfig.enabled,authorizedEmails:newEmails,updatedAt:new Date().toISOString(),previousOwnerEmail:oldOwner},{merge:true});
-    authorizationConfig={ownerEmail:newOwner,enabled:!!authorizationConfig.enabled,authorizedEmails:newEmails};
-    localStorage.setItem("izhar_pavers_authorization_config_v1",JSON.stringify(authorizationConfig));
-    renderAuthorizationUI();
+    authorizationConfig={ownerEmail:newOwner,enabled:!!authorizationConfig.enabled,authorizedEmails:newEmails,updatedAt:new Date().toISOString()};
+    persistAuthorizationLocally();
     if(input)input.value="";
     alert("Admin ownership transferred to "+newOwner+". You will now be signed out.");
     await signOut(cloudAuth);
