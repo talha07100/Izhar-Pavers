@@ -1722,6 +1722,14 @@ function saveCurrentDocument(silent=false){
   }
   return doc;
 }
+function resetDocumentTermsToDefaultTemplate(){
+  const termsBox=document.getElementById("termsList");
+  if(!termsBox) return;
+  termsBox.innerHTML="";
+  getMasterTermData().forEach(t=>addTerm(t.text,t.highlight,t.highlightColor,t.bold,t.italic,t.fontSize));
+  applyTermsAuthLock();
+}
+
 function newDocument(){
   toggleMobileMenu(false);
   if(window.requireCloudLogin && !window.requireCloudLogin()) return false;
@@ -1747,11 +1755,8 @@ function newDocument(){
   if(typeof updatePaymentVisibility==='function') updatePaymentVisibility();
   if(typeof updatePaymentSummary==='function') updatePaymentSummary();
   if(typeof updateReferencePreview==='function') updateReferencePreview();
-  if(typeof addTerm==='function' && typeof defaultTerms!=='undefined'){
-    const termsBox=document.getElementById("termsList");
-    if(termsBox){termsBox.innerHTML=""; getMasterTermData().forEach(t=>addTerm(t.text,t.highlight,t.highlightColor,t.bold,t.italic,t.fontSize));
-applyTermsAuthLock();}
-  }
+  // Always clear the previous document Terms and load ONLY the current Settings default template.
+  resetDocumentTermsToDefaultTemplate();
   const status=document.getElementById("status"); if(status) status.textContent="New file ready — reference will be generated automatically on Save / PDF.";
 }
 
@@ -1853,7 +1858,7 @@ function applySavedDocumentToForm(doc, closePortal=true){
   if(doc.payment?.showDetails && !(doc.payment?.rows||[]).length) togglePaymentDetails();
   const termsBox=document.getElementById("termsList"); termsBox.innerHTML="";
   (doc.terms||[]).forEach(x=>addTerm(x.text,x.highlight,x.highlightColor,x.bold,x.italic,x.fontSize));
-  if(!termsBox.children.length) getMasterTerms().forEach(t=>addTerm(t));
+  if(!termsBox.children.length) getMasterTermData().forEach(t=>addTerm(t.text,t.highlight,t.highlightColor,t.bold,t.italic,t.fontSize));
   updateAmounts(); updatePaymentSummary();
   if(closePortal){
     document.getElementById("status").textContent="Loaded for editing: "+doc.ref;
