@@ -387,7 +387,6 @@ body:has(.documents-portal.open) .saved-card{display:none}
 .admin-chip{display:inline-flex;align-items:center;gap:6px;padding:8px 10px;border:1px solid #dbe2ea;border-radius:9px;background:#f8fafc;font-size:12px;font-weight:700;color:#172033}
 .admin-chip.owner{background:#eef4ff;border-color:#b9cce8}
 .ownership-card .form-control{width:100%;min-height:42px}
-#termsAuthControl.locked{border-color:#d7b24c;background:#fffaf0}
 #termsSettingsCard .master-term-input{min-height:100px;width:100%;font-size:15px;line-height:1.45;resize:vertical}
 @media(max-width:700px){
   .admin-list{display:grid;grid-template-columns:1fr}
@@ -555,20 +554,6 @@ body:has(.documents-portal.open) .saved-card{display:none}
 <h3 style="margin-top:0">Terms &amp; Conditions</h3>
 <p class="sub" style="margin-bottom:10px">Manage the default Terms &amp; Conditions. These terms will be applied automatically to newly created documents.</p>
 <div class="master-terms-editor-list" id="masterTermsEditorList"></div>
-<div id="termsAuthControl" class="card" style="margin-top:12px;background:#f8fafc">
-  <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
-    <div>
-      <h4 style="margin:0 0 4px">Lock Terms &amp; Conditions Editing</h4>
-      <p class="hint" style="margin:0">Turn ON to prevent non-admin users from adding, editing, formatting, reordering or saving terms. Admins can still edit while locked.</p>
-    </div>
-    <label style="display:flex;align-items:center;gap:8px;font-weight:700">
-      <input type="checkbox" id="termsAuthToggle" onchange="toggleTermsAuth(this.checked)">
-      <span>Lock Editing</span>
-    </label>
-  </div>
-  <div class="hint" id="termsLockStatus" style="margin-top:8px"></div>
-</div>
-
 <div class="card" style="margin-top:12px;background:#f8fafc">
 <h4 style="margin:0 0 8px">Terms &amp; Conditions Text Size</h4>
 <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
@@ -1186,12 +1171,8 @@ function moveMasterTerm(btn,direction){
   if(direction>0 && row.nextElementSibling) box.insertBefore(row.nextElementSibling,row);
   refreshMasterTermNumbers();
 }
-async function saveMasterTerms(){
-  if(isTermsAuthLocked() && !isAdminAccount()){
-    alert("Admin ne Terms & Conditions editing lock ki hui hai.");
-    applyTermsAuthLock();
-    return false;
-  }
+function saveMasterTerms(){
+  if(isTermsAuthLocked() && !isAdminAccount()) return;
   const rows=[...document.querySelectorAll("#masterTermsEditorList .master-term-box")];
   const terms=rows.map(row=>({
     text:row.querySelector(".master-term-input")?.value.trim()||"",
@@ -1204,7 +1185,7 @@ async function saveMasterTerms(){
   if(!terms.length){
     loadMasterTermsSettings();
     const st=document.getElementById("termsSettingsStatus"); if(st) st.textContent="Please enter at least one term.";
-    return false;
+    return;
   }
   localStorage.setItem(DEFAULT_TERMS_KEY,JSON.stringify(terms));
   const box=document.getElementById("termsList");
@@ -1212,78 +1193,20 @@ async function saveMasterTerms(){
     box.innerHTML="";
     terms.forEach(t=>addTerm(t.text,t.highlight,t.highlightColor,t.bold,t.italic,t.fontSize));
   }
-  try{
-    if(cloudDb && cloudUser){
-      await setDoc(doc(cloudDb,"appConfig","terms"),{
-        terms,
-        updatedAt:new Date().toISOString(),
-        updatedBy:normalizeEmail(cloudUser.email)
-      },{merge:true});
-    } else if(typeof queueCloudSync==="function") {
-      queueCloudSync();
-    }
-    const st=document.getElementById("termsSettingsStatus"); if(st) st.textContent="Terms & Conditions saved.";
-    return true;
-  }catch(e){
-    const st=document.getElementById("termsSettingsStatus"); if(st) st.textContent="Cloud save failed: "+(e?.message||e);
-    alert("Terms & Conditions save failed.\n\n"+(e?.message||e));
-    return false;
-  }
+  if(typeof queueCloudSync==="function") queueCloudSync();
+  const st=document.getElementById("termsSettingsStatus"); if(st) st.textContent="Terms & Conditions saved.";
 }
 function isTermsAuthLocked(){
-  return authorizationConfig.termsLocked===true;
+  // Terms & Conditions are intentionally unrestricted.
+  return false;
 }
 function applyTermsAuthLock(){
-  const locked=isTermsAuthLocked();
-  const admin=isAdminAccount();
-  const shouldDisable=locked && !admin;
-  const toggle=document.getElementById("termsAuthToggle");
-  if(toggle){
-    toggle.checked=locked;
-    toggle.disabled=!admin;
-  }
-  const status=document.getElementById("termsLockStatus");
-  if(status){
-    status.textContent=locked
-      ? (admin ? "🔓 Locked for normal users. You can still edit because you are an Admin." : "🔒 Editing is locked by an Admin.")
-      : "🔓 Editing is unlocked. Authorized users can edit Terms & Conditions.";
-  }
-  const control=document.getElementById("termsAuthControl");
-  if(control) control.classList.toggle("locked",locked);
-
-  document.querySelectorAll("#masterTermsEditorList textarea,#masterTermsEditorList button,#masterTermsEditorList input").forEach(el=>{
-    el.disabled=shouldDisable;
-  });
-  const add=document.querySelector('#termsSettingsCard button[onclick="addMasterTermBox()"]');
-  const save=document.querySelector('#termsSettingsCard button[onclick="saveMasterTerms()"]');
-  if(add) add.disabled=shouldDisable;
-  if(save) save.disabled=shouldDisable;
-
-  document.querySelectorAll("#termsList textarea,#termsList input,#termsList button").forEach(el=>{
-    el.disabled=shouldDisable;
-  });
-  const viewerEdit=document.getElementById("termsViewerEditBtn");
-  if(viewerEdit) viewerEdit.style.display=shouldDisable ? "none" : "inline-block";
+  // No Terms & Conditions restriction is applied.
 }
-window.toggleTermsAuth=async function(locked){
-  if(!isAdminAccount()){
-    applyTermsAuthLock();
-    return;
-  }
-  const previous=authorizationConfig.termsLocked===true;
-  authorizationConfig.termsLocked=!!locked;
-  authorizationConfig.updatedAt=new Date().toISOString();
-  try{
-    await saveAuthorizationConfig();
-    applyTermsAuthLock();
-    setCloudMessage(locked ? "Terms & Conditions editing is now locked for normal users." : "Terms & Conditions editing is now unlocked for authorized users.");
-  }catch(e){
-    authorizationConfig.termsLocked=previous;
-    applyTermsAuthLock();
-    alert("Terms Lock cloud save failed. The setting was not changed in Firebase.\n\n"+(e?.message||e));
-  }
+window.toggleTermsAuth=async function(){
+  // Kept only for backward compatibility; Terms are always editable.
+  return true;
 }
-
 function addTerm(value="", highlight=false, highlightColor="#fff3a3", bold=false, italic=false, fontSize=null){
   if(isTermsAuthLocked() && !isAdminAccount()) return;
   const box=document.getElementById("termsList");
@@ -2380,11 +2303,11 @@ renderSavedDocuments();
 <script type="module">
 import { initializeApp, getApps } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-app.js";
 import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut, setPersistence, browserLocalPersistence } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js";
-import { getFirestore, doc, getDoc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js";
+import { getFirestore, doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js";
 
 const FIREBASE_CONFIG_KEY="izhar_pavers_firebase_config_v1";
 const CLOUD_SYNC_KEYS=["izhar_pavers_saved_documents_v1","izhar_pavers_recycle_bin_v1","izhar_pavers_materials_v1","izhar_pavers_profile_settings_v1","izhar_pavers_default_terms_v1","izhar_pavers_reference_settings_v1","izhar_pavers_terms_font_size_v1"];
-let cloudApp=null, cloudAuth=null, cloudDb=null, cloudUser=null, syncTimer=null, cloudReady=false, firebaseInitPromise=null, authProcessingUid=null, authorizationUnsubscribe=null, termsConfigUnsubscribe=null;
+let cloudApp=null, cloudAuth=null, cloudDb=null, cloudUser=null, syncTimer=null, cloudReady=false, firebaseInitPromise=null, authProcessingUid=null;
 const BOOTSTRAP_OWNER_EMAIL="talhakhan14746@gmail.com";
 let authorizationConfig={ownerEmail:BOOTSTRAP_OWNER_EMAIL,adminEmails:[BOOTSTRAP_OWNER_EMAIL],enabled:false,authorizedEmails:[BOOTSTRAP_OWNER_EMAIL],termsLocked:false};
 let authorizationChecked=false;
@@ -2548,47 +2471,6 @@ function openAuthorizationSettings(){
   setTimeout(()=>{ const el=document.getElementById("authorizationCard"); if(el){el.scrollIntoView({behavior:"smooth",block:"start"});} },80);
 }
 window.openAuthorizationSettings=openAuthorizationSettings;
-
-function applyCloudTermsData(data){
-  if(!data || !Array.isArray(data.terms) || !data.terms.length) return;
-  const terms=data.terms.map(normalizeMasterTerm).filter(x=>x.text);
-  if(!terms.length) return;
-  localStorage.setItem(DEFAULT_TERMS_KEY,JSON.stringify(terms));
-  loadMasterTermsSettings();
-  const box=document.getElementById("termsList");
-  if(box){
-    box.innerHTML="";
-    terms.forEach(t=>addTerm(t.text,t.highlight,t.highlightColor,t.bold,t.italic,t.fontSize));
-  }
-  applyTermsAuthLock();
-}
-function startRealtimeConfigListeners(){
-  if(!cloudDb || !cloudUser) return;
-  try{ if(authorizationUnsubscribe) authorizationUnsubscribe(); }catch(e){}
-  try{ if(termsConfigUnsubscribe) termsConfigUnsubscribe(); }catch(e){}
-  const authRef=doc(cloudDb,"appConfig","authorization");
-  authorizationUnsubscribe=onSnapshot(authRef,snap=>{
-    if(!snap.exists()) return;
-    const d=snap.data()||{};
-    const owner=normalizeEmail(d.ownerEmail)||BOOTSTRAP_OWNER_EMAIL;
-    const admins=Array.isArray(d.adminEmails)?d.adminEmails.map(normalizeEmail).filter(validGmail):[owner];
-    authorizationConfig={
-      ownerEmail:owner,
-      adminEmails:[...new Set([owner,...admins])].slice(0,4),
-      enabled:d.enabled===true,
-      authorizedEmails:Array.isArray(d.authorizedEmails)?[...new Set(d.authorizedEmails.map(normalizeEmail).filter(Boolean))]:[owner],
-      termsLocked:d.termsLocked===true,
-      updatedAt:String(d.updatedAt||"")
-    };
-    localStorage.setItem("izhar_pavers_authorization_config_v1",JSON.stringify(authorizationConfig));
-    renderAuthorizationUI();
-    applyTermsAuthLock();
-  },err=>console.warn("Authorization realtime listener:",err));
-  const termsRef=doc(cloudDb,"appConfig","terms");
-  termsConfigUnsubscribe=onSnapshot(termsRef,snap=>{
-    if(snap.exists()) applyCloudTermsData(snap.data());
-  },err=>console.warn("Terms realtime listener:",err));
-}
 
 async function saveAuthorizationConfig(){
   if(!isAdminAccount()) throw new Error("Only an Admin can change authorization.");
@@ -2927,7 +2809,6 @@ async function initFirebase(){
             // Authentication is already complete. Mark the account active immediately
             // so the UI never remains stuck on "Cloud data loading…".
             cloudReady=true;
-            startRealtimeConfigListeners();
             setCloudMessage("Google account connected. Cloud sync is active.");
             updateCloudUI();
             closeCloudLogin();
