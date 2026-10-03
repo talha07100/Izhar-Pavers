@@ -132,6 +132,11 @@ td input{border:0;padding:5px;border-radius:0}
 
 @media(max-width:700px){.cloud-auth-card{left:10px;right:10px;top:10px;justify-content:space-between}.cloud-auth-card .cloud-user{max-width:145px}.wrap{padding-top:65px}}
 
+/* Mobile install banner: shown on the website itself, not inside the hamburger menu. */
+.install-banner{display:none;align-items:center;justify-content:space-between;gap:12px;max-width:1100px;margin:10px auto 14px;padding:11px 14px;background:#fff;border:1px solid #dbe2ea;border-radius:14px;box-shadow:0 4px 16px #0000000d}
+.install-banner-text{min-width:0}.install-banner-title{font-weight:800;color:#14213d;font-size:14px}.install-banner-sub{font-size:11px;color:#64748b;margin-top:2px;line-height:1.35}.install-banner .btn{white-space:nowrap}
+@media(max-width:700px){.install-banner{display:flex;position:sticky;top:0;z-index:1500;margin:0 10px 12px;padding:10px 11px}.install-banner .btn{padding:9px 11px;font-size:12px}.install-banner-sub{display:none}}
+@media(min-width:701px){.install-banner{display:none!important}}
 
 
 .saved-card{position:fixed;left:16px;top:24px;transform:none;width:270px;height:calc(100vh - 48px);max-height:none;overflow:auto;margin:0;padding:16px;z-index:1050;background:rgba(255,255,255,.98);box-shadow:0 12px 34px rgba(15,23,42,.12);border:1px solid #dfe5ec;border-radius:16px;backdrop-filter:blur(12px)}
@@ -210,7 +215,9 @@ body:has(.documents-portal.open) .saved-card{display:none}
   .settings-side-btn{display:none !important;}
 }
 
+#installBanner{display:none;max-width:1100px;margin:10px auto 14px;padding:11px 13px;background:#fff;border:1px solid #dbe2ea;border-radius:14px;box-shadow:0 4px 14px #0000000d;align-items:center;justify-content:space-between;gap:12px;position:relative;z-index:1500}#installBanner div{display:flex;flex-direction:column;gap:2px;min-width:0}#installBanner strong{font-size:14px;color:#14213d}#installBanner span{font-size:11px;color:#64748b}#installBanner button{border:0;border-radius:10px;background:#173f7a;color:#fff;font-weight:800;padding:9px 13px;white-space:nowrap;cursor:pointer}
 .settings-nav-btn{min-height:52px}
+@media(max-width:700px){#installBanner{display:flex;margin:8px 12px 12px;padding:10px 11px}#installBanner button{font-size:12px;padding:8px 10px}}
 .settings-nav{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:0 0 14px;padding:2px}.settings-nav-btn{border:1px solid #dbe2ea;background:#f8fafc;border-radius:11px;padding:11px 10px;text-align:left;font-weight:800;color:#172033;cursor:pointer}.settings-nav-btn:active{transform:scale(.99)}
 .terms-viewer-overlay{position:fixed;inset:0;background:rgba(15,23,42,.48);display:none;align-items:center;justify-content:center;padding:18px;z-index:3000}.terms-viewer-overlay.open{display:flex}.terms-viewer{width:min(620px,100%);max-height:85vh;overflow:auto;background:#fff;border-radius:18px;padding:18px;box-shadow:0 20px 50px #0004}.terms-viewer-head{display:flex;justify-content:space-between;align-items:center;gap:10px}.terms-viewer-list{margin:14px 0 0;padding-left:24px}.terms-viewer-list li{margin:9px 0;line-height:1.45;color:#334155}
 @media(max-width:700px){.settings-nav{grid-template-columns:1fr}.terms-viewer-overlay{padding:10px}.terms-viewer{max-height:90vh}}
