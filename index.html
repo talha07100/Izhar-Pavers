@@ -2352,48 +2352,45 @@ async function generatePDF(openPdf=false, printOnly=false, persist=true){
       });
     }
 
-    // Version 47 footer: the original template already contains the clean
-    // signature, stamp/seal, company line, name, designation and phone.
-    // When Signature is ON, leave this footer completely untouched so it stays
-    // exactly like Version 47. When Signature is OFF, hide ONLY the signature
-    // artwork area; the stamp and the complete name/designation/phone block stay.
-    // IMPORTANT: the footer is rendered ONLY from this document's frozen
-    // profile snapshot. Never read profile fields/signature/stamp from current
-    // Settings here; otherwise opening an old document after changing the profile
-    // would silently change its signature/profile.
+    // Dynamic document footer / signature block.
+    // IMPORTANT: this block uses ONLY the frozen profile snapshot belonging to
+    // this document. Opening an older quotation must never pick up the current
+    // Settings profile.
     white(page,25,600,550,225);
 
     const footerName=clean(profile.name)||"TALHA KHAN";
     const footerDesignation=clean(profile.designation)||"SALE & MARKETING OFFICER (PAVERS)";
     const footerPhone=clean(profile.phone)||"0308-0620710";
     const footerCompany=clean(profile.companyLine)||"For IZHAR PAVERS (PVT) LIMITED";
+    const footerSignOff=!!profile.computerGeneratedEnabled;
 
-    drawText(page,times,"Yours Truly,",72,652,11.5);
-    drawText(page,timesB,footerCompany,72,670,11.5,{maxWidth:320});
+    // The company line is the TOP ANCHOR. Everything else is positioned from
+    // the previous element's real height, so a signature can never collide with
+    // the name/designation/phone block.
+    const footerX=72;
+    const footerRightX=430;
+    const footerBottomTop=817;
+    const footerTopAnchor=652;
+    const companyTop=footerTopAnchor+18;
+    const companySize=11.5;
+    const companyMaxWidth=320;
+    const companyLines=wrapLines(footerCompany,timesB,companySize,companyMaxWidth);
+    const companyLineH=companySize*1.2;
+    const companyH=Math.max(companyLineH,companyLines.length*companyLineH);
 
-    if(profile.computerGeneratedEnabled){
-      // Signature OFF: show the computer-generated statement and no signature.
-      drawText(page,timesI,footerName,72,710,15.5,{maxWidth:220});
-      drawText(page,timesI,footerDesignation,72,735,10.5,{maxWidth:320});
-      drawText(page,times,footerPhone,72,758,10.5,{maxWidth:150});
+    drawText(page,times,"Yours Truly,",footerX,footerTopAnchor,11.5);
+    companyLines.forEach((ln,i)=>{
+      drawText(page,timesB,ln,footerX,companyTop+i*companyLineH,companySize,{maxWidth:companyMaxWidth});
+    });
 
-      try{
-        const stampData=profile.stampData||DEFAULT_STAMP_DATA;
-        const stampB64=String(stampData).split(',')[1]||'';
-        const stampBytes=Uint8Array.from(atob(stampB64),c=>c.charCodeAt(0));
-        const stampImg=await pdf.embedPng(stampBytes);
-        page.drawImage(stampImg,{x:430,y:pageH-(674+92),width:92,height:92});
-      }catch(e){}
+    let currentTop=companyTop+companyH+10;
+    let signatureDrawn=false;
+    let signatureW=0, signatureH=0;
 
-      const refNow=clean(document.getElementById("ref").value);
-      const finalNote="This is a computer-generated document issued under Ref#"+(refNow?" "+refNow:"")+" and does not require a signature.";
-      drawText(page,timesB,finalNote,72,792,8.2,{maxWidth:450});
-      white(page,300,821,250,18);
-      drawText(page,timesB,"Karachi, Islamabad, Faisalabad, Jauharabad, Hatar",350,815,8.5,{maxWidth:200});
-    }else{
-      // Signature ON: draw the exact signature image saved with this document.
-      // This makes uploaded/replaced signatures document-specific.
-      let signatureDrawn=false;
+    // Signature ON: load and crop the saved signature image, then scale it to
+    // a predictable maximum size. The next text position is calculated from
+    // the actual rendered height (not a hard-coded Y coordinate).
+    if(!footerSignOff){
       try{
         const signatureData=await cropTransparentImageData(await cleanSignatureImageData(profile.signatureData||DEFAULT_SIGNATURE_DATA));
         const sigB64=String(signatureData).split(',')[1]||'';
@@ -2401,34 +2398,84 @@ async function generatePDF(openPdf=false, printOnly=false, persist=true){
           const sigBytes=Uint8Array.from(atob(sigB64),c=>c.charCodeAt(0));
           const sigImg=await pdf.embedPng(sigBytes);
           const iw=sigImg.width||300, ih=sigImg.height||100;
-          const maxW=190, maxH=32;
+          const maxW=190, maxH=34;
           const ratio=Math.min(maxW/iw,maxH/ih);
-          const sw=Math.max(1,iw*ratio), sh=Math.max(1,ih*ratio);
-          // Dedicated signature area: keep the ink clearly above "Talha Khan".
-          // The name starts at top=710, so leave about 8px of visual breathing room.
-          const signatureTop=670;
-          page.drawImage(sigImg,{x:72,y:pageH-(signatureTop+sh),width:sw,height:sh});
+          signatureW=Math.max(1,iw*ratio);
+          signatureH=Math.max(1,ih*ratio);
+          page.drawImage(sigImg,{
+            x:footerX,
+            y:yTop(pageH,currentTop,signatureH),
+            width:signatureW,
+            height:signatureH
+          });
           signatureDrawn=true;
+          currentTop+=signatureH+9;
+        } else {
+          currentTop+=18;
         }
-      }catch(e){ console.warn("Document signature render failed:",e); }
+      }catch(e){
+        console.warn("Document signature render failed:",e);
+        currentTop+=18;
+      }
+    }else{
+      // Signature OFF: deliberately shrink the signature area rather than
+      // leaving the old signature gap behind.
+      currentTop+=8;
+    }
 
-      // Keep the name/designation/phone tied to the same frozen profile.
-      drawText(page,timesI,footerName,72,710,15.5,{maxWidth:220});
-      drawText(page,timesI,footerDesignation,72,735,10.5,{maxWidth:320});
-      drawText(page,times,footerPhone,72,758,10.5,{maxWidth:150});
+    // Name, designation and phone always follow the calculated signature
+    // position. Their positions therefore remain stable relative to the sign.
+    const nameTop=currentTop;
+    const designationTop=nameTop+19;
+    const phoneTop=designationTop+16;
+    drawText(page,timesB,footerName,footerX,nameTop,9.5,{maxWidth:250});
+    drawText(page,times,footerDesignation,footerX,designationTop,8.5,{maxWidth:330});
+    drawText(page,times,`Cell: ${footerPhone}`,footerX,phoneTop,8.5,{maxWidth:180});
 
-      // The stamp is also frozen with the document.
-      try{
-        const stampData=profile.stampData||DEFAULT_STAMP_DATA;
-        const stampB64=String(stampData).split(',')[1]||'';
-        const stampBytes=Uint8Array.from(atob(stampB64),c=>c.charCodeAt(0));
-        const stampImg=await pdf.embedPng(stampBytes);
-        page.drawImage(stampImg,{x:430,y:pageH-(674+92),width:92,height:92});
-      }catch(e){}
+    // Stamp/seal is anchored to the text block, not to a fixed page Y. This
+    // keeps it side-by-side with the signature details in both ON and OFF modes.
+    try{
+      const stampData=profile.stampData||DEFAULT_STAMP_DATA;
+      const stampB64=String(stampData).split(',')[1]||'';
+      const stampBytes=Uint8Array.from(atob(stampB64),c=>c.charCodeAt(0));
+      const stampImg=await pdf.embedPng(stampBytes);
+      const iw=stampImg.width||100, ih=stampImg.height||100;
+      const maxStampW=92, maxStampH=92;
+      const stampRatio=Math.min(maxStampW/iw,maxStampH/ih);
+      const stampW=Math.max(1,iw*stampRatio), stampH=Math.max(1,ih*stampRatio);
+      const stampTop=Math.max(companyTop,currentTop-2);
+      page.drawImage(stampImg,{
+        x:footerRightX,
+        y:yTop(pageH,stampTop,stampH),
+        width:stampW,
+        height:stampH,
+        opacity:0.85
+      });
+    }catch(e){
+      console.warn("Document stamp render failed:",e);
+    }
 
-      // If an invalid signature image is supplied, do not substitute a newer
-      // Settings signature. The rest of the original document profile remains fixed.
-      if(!signatureDrawn) console.warn("Saved document has no usable signature image.");
+    // Computer-generated note is shown ONLY when Signature is OFF. It is
+    // positioned after the phone line so it can never cover the profile block.
+    let noteTop=phoneTop+17;
+    if(footerSignOff){
+      const refNow=clean(document.getElementById("ref").value);
+      const savedNote=clean(profile.computerGeneratedText);
+      const finalNote=savedNote
+        ? savedNote.replace(/Ref#(?:\s*)/i,`Ref#${refNow?" "+refNow:""}`)
+        : `This is a computer-generated document issued under Ref#${refNow?" "+refNow:""} and does not require a signature.`;
+      const noteLines=wrapLines(finalNote,timesI,7.8,450);
+      noteLines.forEach((ln,i)=>drawText(page,timesI,ln,footerX,noteTop+i*10,7.8,{maxWidth:450,color:rgb(0.3,0.3,0.3)}));
+      noteTop+=Math.max(10,noteLines.length*10)+8;
+    }
+
+    // Keep the branch/location line below the dynamically-sized footer content.
+    const officeLine="Karachi, Islamabad, Faisalabad, Jauharabad, Hatar";
+    const officeTop=Math.min(footerBottomTop,noteTop);
+    drawText(page,timesB,officeLine,350,officeTop,8.5,{maxWidth:200});
+
+    if(!footerSignOff && !signatureDrawn){
+      console.warn("Saved document has no usable signature image; footer spacing was still calculated safely.");
     }
 
     const out=await pdf.save();
