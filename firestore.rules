@@ -2,91 +2,58 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-
-    function signedIn() {
-      return request.auth != null;
-    }
-
-    function email() {
-      return signedIn() ? request.auth.token.email : '';
-    }
-
-    function authDoc() {
-      return get(/databases/$(database)/documents/appConfig/authorization);
-    }
-
-    function currentOwner() {
-      return signedIn()
-        && resource.data.ownerEmail == email();
-    }
-
-    function currentAdmin() {
-      return signedIn()
-        && exists(/databases/$(database)/documents/appConfig/authorization)
-        && email() in authDoc().data.adminEmails;
-    }
-
-    function validAdminList(data) {
-      return data.adminEmails is list
-        && data.adminEmails.size() >= 1
-        && data.adminEmails.size() <= 4
-        && data.ownerEmail in data.adminEmails;
-    }
+    function signedIn() { return request.auth != null; }
+    function email() { return signedIn() ? request.auth.token.email : ''; }
+    function authDoc() { return get(/databases/$(database)/documents/appConfig/authorization); }
+    function currentOwner() { return signedIn() && resource.data.ownerEmail == email(); }
+    function currentAdmin() { return signedIn() && exists(/databases/$(database)/documents/appConfig/authorization) && email() in authDoc().data.adminEmails; }
+    function validAdminList(data) { return data.adminEmails is list && data.adminEmails.size() >= 1 && data.adminEmails.size() <= 4 && data.ownerEmail in data.adminEmails; }
 
     match /appConfig/authorization {
       allow read: if signedIn() && (currentAdmin() || currentOwner());
+      allow create: if signedIn() && email() == 'talhakhan14746@gmail.com' && request.resource.data.ownerEmail == email() && validAdminList(request.resource.data);
 
-      allow create: if signedIn()
-        && email() == 'talhakhan14746@gmail.com'
-        && request.resource.data.ownerEmail == email()
-        && validAdminList(request.resource.data);
-
-      // Normal Admin/Authorization changes: owner remains unchanged.
+      // Normal settings changes: owner cannot change here.
       allow update: if currentOwner()
         && request.resource.data.ownerEmail == resource.data.ownerEmail
         && validAdminList(request.resource.data);
 
-      // Final ownership transfer: ONLY the existing Owner can perform it,
-      // and ONLY after the new Gmail has accepted the request.
-      allow update: if currentOwner()
+      // New Owner completes an accepted transfer. The accepted request must
+      // belong to the signed-in Gmail and the old owner must match the request.
+      allow update: if signedIn()
+        && request.resource.data.ownerEmail == email()
+        && request.resource.data.adminEmails.size() == 1
+        && request.resource.data.adminEmails[0] == email()
         && request.resource.data.ownerEmail != resource.data.ownerEmail
-        && request.resource.data.ownerEmail == request.resource.data.adminEmails[0]
-        && validAdminList(request.resource.data)
-        && exists(/databases/$(database)/documents/ownershipRequests/$(request.resource.data.ownerEmail))
-        && get(/databases/$(database)/documents/ownershipRequests/$(request.resource.data.ownerEmail)).data.status == 'accepted'
-        && get(/databases/$(database)/documents/ownershipRequests/$(request.resource.data.ownerEmail)).data.oldOwnerEmail == email()
-        && get(/databases/$(database)/documents/ownershipRequests/$(request.resource.data.ownerEmail)).data.newOwnerEmail == request.resource.data.ownerEmail;
+        && exists(/databases/$(database)/documents/ownershipRequests/$(email()))
+        && get(/databases/$(database)/documents/ownershipRequests/$(email())).data.status == 'accepted'
+        && get(/databases/$(database)/documents/ownershipRequests/$(email())).data.newOwnerEmail == email()
+        && get(/databases/$(database)/documents/ownershipRequests/$(email())).data.oldOwnerEmail == resource.data.ownerEmail
+        && request.resource.data.pendingOwnershipTransfer == null
+        && validAdminList(request.resource.data);
 
       allow delete: if false;
     }
 
     match /ownershipRequests/{targetEmail} {
-      // Current Owner creates a request for the target Gmail.
       allow create: if signedIn()
         && email() == request.resource.data.oldOwnerEmail
         && targetEmail == request.resource.data.newOwnerEmail
         && request.resource.data.status == 'pending';
 
-      // Target Gmail can see its own request. Current Owner can also see it.
-      allow read: if signedIn()
-        && (email() == targetEmail || email() == resource.data.oldOwnerEmail);
+      allow read: if signedIn() && (email() == targetEmail || email() == resource.data.oldOwnerEmail);
 
-      // Target Gmail can accept; current Owner can cancel/complete it.
-      allow update: if signedIn()
-        && (
-          (
-            email() == targetEmail
-            && resource.data.status == 'pending'
-            && request.resource.data.status == 'accepted'
-            && request.resource.data.newOwnerEmail == email()
-          )
-          ||
-          (
-            email() == resource.data.oldOwnerEmail
-            && request.resource.data.oldOwnerEmail == resource.data.oldOwnerEmail
-            && request.resource.data.newOwnerEmail == resource.data.newOwnerEmail
-          )
-        );
+      allow update: if signedIn() && (
+        (email() == targetEmail
+          && resource.data.status == 'pending'
+          && request.resource.data.status == 'accepted'
+          && request.resource.data.newOwnerEmail == email()
+          && request.resource.data.oldOwnerEmail == resource.data.oldOwnerEmail)
+        ||
+        (email() == resource.data.oldOwnerEmail
+          && request.resource.data.oldOwnerEmail == resource.data.oldOwnerEmail
+          && request.resource.data.newOwnerEmail == resource.data.newOwnerEmail)
+      );
 
       allow delete: if false;
     }
