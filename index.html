@@ -15,12 +15,8 @@
 <title>Izhar Pavers — Quotation / Invoice Generator</title>
 <style>
 *{box-sizing:border-box}
-/* Remove browser default blue focus ring/highlight. */
-*:focus, input:focus, textarea:focus, select:focus, button:focus {
-  outline: none !important;
-  box-shadow: none !important;
-}
-
+*:focus, input:focus, textarea:focus, select:focus, button:focus { outline:none !important; box-shadow:none !important; }
+button, input, textarea, select { -webkit-tap-highlight-color:transparent; }
 body{margin:0;background:#eef1f5;font-family:Arial,sans-serif;color:#111}
 .wrap{max-width:1050px;margin:24px auto;padding:16px}
 h1{margin:0 0 6px;font-size:24px}
@@ -1530,7 +1526,6 @@ function formatDateForPdf(value){
 }
 
 const STORAGE_KEY="izhar_pavers_saved_documents_v1";
-const LEGACY_STORAGE_KEY="izhar_saved_docs";
 const TRASH_KEY="izhar_pavers_recycle_bin_v1";
 const REF_SETTINGS_KEY="izhar_pavers_reference_settings_v1";
 let savedFolderFilter="ALL";
@@ -1565,38 +1560,17 @@ function normalizeDocumentIds(list){
 }
 function getSavedDocuments(){
   try{
-    let raw=localStorage.getItem(STORAGE_KEY);
-    if(!raw){
-      const legacy=localStorage.getItem(LEGACY_STORAGE_KEY);
-      if(legacy){
-        try{
-          const legacyDocs=JSON.parse(legacy);
-          if(Array.isArray(legacyDocs) && legacyDocs.length){
-            const migrated=legacyDocs.map((d,i)=>({
-              ...d, id:d?.id || ("legacy_"+Date.now()+"_"+i),
-              subject:(d?.subject||"QUOTATION").toUpperCase(),
-              createdAt:d?.createdAt || d?.savedAt || d?.date || new Date().toISOString(),
-              savedAt:d?.savedAt || new Date().toISOString(), isDeleted:false
-            }));
-            localStorage.setItem(STORAGE_KEY,JSON.stringify(migrated)); raw=JSON.stringify(migrated);
-          }
-        }catch(e){}
-      }
-    }
-    const docs=JSON.parse(raw||"[]");
+    const docs=JSON.parse(localStorage.getItem(STORAGE_KEY)||"[]");
     const list=Array.isArray(docs)?docs.filter(x=>x && (x.subject==="QUOTATION" || x.subject==="INVOICE")):[];
     const normalized=normalizeDocumentIds(list);
     if(JSON.stringify(normalized)!==JSON.stringify(list)) localStorage.setItem(STORAGE_KEY,JSON.stringify(normalized));
     return normalized;
   }catch(e){return []}
 }
-
 function setSavedDocuments(list){
   const normalized=normalizeDocumentIds(list);
-  const payload=JSON.stringify(normalized);
-  localStorage.setItem(STORAGE_KEY,payload);
-  try{ localStorage.setItem(LEGACY_STORAGE_KEY,payload); }catch(e){}
-  return true;
+  localStorage.setItem(STORAGE_KEY,JSON.stringify(normalized));
+  return normalized;
 }
 function getRecycleBinDocuments(){
   try{
@@ -1760,14 +1734,16 @@ function currentDocumentData(){
     // createdAt is immutable: opening, editing, printing or downloading a file
     // must never move it to the top of the Documents folder.
     createdAt:existingDocument?.createdAt || existingDocument?.savedAt || new Date().toISOString(),
-    savedAt:existingDocument?.savedAt || new Date().toISOString()
+    savedAt:existingDocument?.savedAt || new Date().toISOString(),
+    updatedAt:new Date().toISOString()
   };
 }
 let currentEditingDocumentId=null;
 let activeDocumentProfileSnapshot=null;
 
 function saveCurrentDocument(silent=false){
-  if(window.requireCloudLogin && !window.requireCloudLogin()) return false;
+  // Local storage is the primary document store. Firebase is only a backup/sync layer;
+  // a temporary Google/Firebase problem must NEVER prevent a file from being saved.
   // Saving/updating is also blocked until the required quotation details are complete.
   if(!validateQuotationBeforeCreate()) return false;
   const subject=(document.getElementById("subject").value||"QUOTATION").toUpperCase();
@@ -1799,17 +1775,17 @@ function saveCurrentDocument(silent=false){
     list.unshift(doc);
   }
   currentEditingDocumentId=doc.id;
-  try{
-    setSavedDocuments(list);
-    const verify=getSavedDocuments().find(x=>String(x.id)===String(doc.id));
-    if(!verify) throw new Error("Saved document could not be verified in localStorage.");
-  }catch(error){
+  setSavedDocuments(list);
+  // Verify immediately. If this fails, do not claim the file was saved.
+  const verify=getSavedDocuments().find(x=>String(x.id)===String(doc.id));
+  if(!verify){
     const status=document.getElementById("status");
-    if(status) status.textContent="Save failed: browser storage is unavailable or full. Please try again.";
-    if(!silent) alert("File save nahi ho saki. Browser storage full/blocked ho sakti hai. Please try again.");
-    console.error("Izhar Pavers save error:",error);
+    if(status) status.textContent="Save failed: browser storage is unavailable or full.";
+    if(!silent) alert("File save nahi ho saki. Browser storage unavailable/full hai. Please try again.");
     return false;
   }
+  // Firestore sync is best-effort only; it can never cancel the local save.
+  try{ if(window.cloudSyncNow) window.cloudSyncNow(); }catch(e){ console.warn("Cloud backup request failed:",e); }
   renderSavedDocuments();
   if(!silent){
     const status=document.getElementById("status");
@@ -1819,7 +1795,6 @@ function saveCurrentDocument(silent=false){
 }
 function newDocument(){
   toggleMobileMenu(false);
-  if(window.requireCloudLogin && !window.requireCloudLogin()) return false;
   currentEditingDocumentId=null;
   // Freeze the current profile/signature/stamp for this new file immediately.
   // Later Settings changes will only affect subsequently created files.
@@ -1856,7 +1831,6 @@ function newDocument(){
 }
 
 async function openSavedDocumentPDF(id){
-  if(window.requireCloudLogin && !window.requireCloudLogin()) return false;
   const doc=getSavedDocuments().find(x=>x.id===id);
   if(!doc)return;
   // Generate the saved document as a PDF and open it in the browser PDF viewer.
@@ -1878,7 +1852,6 @@ async function openSavedDocumentPDF(id){
 }
 
 async function printSavedDocument(id){
-  if(window.requireCloudLogin && !window.requireCloudLogin()) return false;
   const doc=getSavedDocuments().find(x=>x.id===id);
   if(!doc)return;
   const previous=currentDocumentData();
@@ -1899,7 +1872,6 @@ async function printSavedDocument(id){
 }
 
 async function downloadSavedDocument(id){
-  if(window.requireCloudLogin && !window.requireCloudLogin()) return false;
   const doc=getSavedDocuments().find(x=>x.id===id);
   if(!doc)return;
 
@@ -2047,7 +2019,6 @@ function permanentlyDeleteSelectedDocuments(){
 }
 
 function duplicateSavedDocument(id){
-  if(window.requireCloudLogin && !window.requireCloudLogin()) return false;
   const source=getSavedDocuments().find(x=>String(x.id)===String(id));
   if(!source)return;
   const subject=source.subject==='INVOICE'?'INVOICE':'QUOTATION';
@@ -2064,7 +2035,6 @@ function duplicateSavedDocument(id){
   const status=document.getElementById('status'); if(status) status.textContent='Duplicated as '+copy.ref;
 }
 function loadSavedDocument(id){
-  if(window.requireCloudLogin && !window.requireCloudLogin()) return false;
   const doc=getSavedDocuments().find(x=>x.id===id); if(!doc)return;
   applySavedDocumentToForm(doc,true);
 }
@@ -2208,7 +2178,6 @@ function validateQuotationBeforeCreate(){
 }
 
 async function generatePDF(openPdf=false, printOnly=false, persist=true){
-  if(window.requireCloudLogin && !window.requireCloudLogin()) return false;
   if(!validateQuotationBeforeCreate()) return false;
   const subject=(document.getElementById("subject").value||"QUOTATION").toUpperCase();
   // A saved document opened/viewed from the Documents folder is read-only.
@@ -2405,7 +2374,10 @@ async function generatePDF(openPdf=false, printOnly=false, persist=true){
     // IMPORTANT: this block uses ONLY the frozen profile snapshot belonging to
     // this document. Opening an older quotation must never pick up the current
     // Settings profile.
-    white(page,70,600,458,245);
+    // The original Word/PDF template contains an old signature + stamp in the footer.
+    // Cover the complete footer width so NO fragment of the old signature can leak
+    // through beside the company line. The current document profile is redrawn below.
+    white(page,0,635,pageW,210);
 
     const footerName=clean(profile.name)||"TALHA KHAN";
     const footerDesignation=clean(profile.designation)||"SALE & MARKETING OFFICER (PAVERS)";
@@ -2493,6 +2465,8 @@ async function generatePDF(openPdf=false, printOnly=false, persist=true){
     // Stamp / seal: keep it to the right of the signatory block and just
     // above the office/branch line. It is deliberately NOT tied to the
     // "LIMITED" company-line baseline, preventing overlap.
+    const officeLine="Karachi, Islamabad, Faisalabad, Jauharabad, Hatar";
+    const officeTop=Math.min(footerBottomTop,noteTop);
     try{
       const stampData=profile.stampData||DEFAULT_STAMP_DATA;
       const stampB64=String(stampData).split(',')[1]||'';
@@ -2532,8 +2506,6 @@ async function generatePDF(openPdf=false, printOnly=false, persist=true){
     }
 
     // Keep the branch/location line below the dynamically-sized footer content.
-    const officeLine="Karachi, Islamabad, Faisalabad, Jauharabad, Hatar";
-    const officeTop=Math.min(footerBottomTop,noteTop);
     drawText(page,timesB,officeLine,350,officeTop,8.5,{maxWidth:200});
 
     if(!footerSignOff && !signatureDrawn){
@@ -3141,9 +3113,8 @@ window.cloudLogout=async function(){
   try{
     await signOut(cloudAuth);
     clearTimeout(syncTimer);
-    // Remove only account-synced local data. Firestore data remains محفوظ
-    // and will be restored when the same Google account signs in again.
-    CLOUD_SYNC_KEYS.forEach(key=>localStorage.removeItem(key));
+    // Keep local documents/settings on this device. Logging out must NOT make
+    // the user's saved quotations disappear from the Documents folder.
     cloudUser=null;
     cloudReady=false;
     updateCloudUI();
@@ -3161,6 +3132,58 @@ function applyCloudPayload(payload){
   if(!payload)return;
   for(const key of CLOUD_SYNC_KEYS){ if(Object.prototype.hasOwnProperty.call(payload,key)){ const v=payload[key]; if(v===null||v===undefined)localStorage.removeItem(key); else localStorage.setItem(key,typeof v==="string"?v:JSON.stringify(v)); } }
 }
+function parseArrayStorage(key){
+  try{ const v=JSON.parse(localStorage.getItem(key)||"[]"); return Array.isArray(v)?v:[]; }
+  catch(e){ return []; }
+}
+function docTime(d, fallback=0){
+  const vals=[d?.updatedAt,d?.savedAt,d?.createdAt,d?.deletedAt,d?.date];
+  for(const v of vals){ const t=Date.parse(v||""); if(Number.isFinite(t)) return t; }
+  return fallback;
+}
+function mergeDocumentCollections(localActive, cloudActive, localTrash, cloudTrash){
+  const activeMap=new Map(), trashMap=new Map();
+  const putNewest=(map,item)=>{
+    if(!item || !item.id) return;
+    const id=String(item.id), old=map.get(id);
+    if(!old || docTime(item)>docTime(old)) map.set(id,JSON.parse(JSON.stringify(item)));
+  };
+  [...localActive,...cloudActive].forEach(x=>putNewest(activeMap,x));
+  [...localTrash,...cloudTrash].forEach(x=>putNewest(trashMap,x));
+  // A deletion wins only when its deletion timestamp is newer than the active copy.
+  for(const [id,t] of trashMap){
+    const a=activeMap.get(id);
+    const deletedAt=Date.parse(t.deletedAt||"")||docTime(t);
+    const activeAt=docTime(a);
+    if(a && deletedAt>=activeAt) activeMap.delete(id);
+  }
+  return {
+    active:[...activeMap.values()],
+    trash:[...trashMap.values()]
+  };
+}
+function mergeCloudPayloadSafely(payload){
+  if(!payload || typeof payload!=="object") return;
+  const localActive=parseArrayStorage(STORAGE_KEY);
+  const cloudActive=Array.isArray(payload[STORAGE_KEY])?payload[STORAGE_KEY]:[];
+  const localTrash=parseArrayStorage(TRASH_KEY);
+  const cloudTrash=Array.isArray(payload[TRASH_KEY])?payload[TRASH_KEY]:[];
+  const merged=mergeDocumentCollections(localActive,cloudActive,localTrash,cloudTrash);
+  // Local data is authoritative on equal timestamps; merged data is written once.
+  setSavedDocuments(merged.active);
+  setRecycleBinDocuments(merged.trash);
+  // For settings/materials/terms/reference/profile, keep existing local values if
+  // they are newer/non-empty; otherwise accept the cloud snapshot.
+  for(const key of CLOUD_SYNC_KEYS){
+    if(key===STORAGE_KEY || key===TRASH_KEY) continue;
+    const cloudValue=payload[key];
+    if(cloudValue===null || cloudValue===undefined) continue;
+    const localValue=localStorage.getItem(key);
+    if(!localValue || localValue==="null" || localValue==="[]" || localValue==="{}"){
+      localStorage.setItem(key,typeof cloudValue==="string"?cloudValue:JSON.stringify(cloudValue));
+    }
+  }
+}
 async function pullOrMigrateCloudData(){
   if(!cloudUser||!cloudDb)return;
   const ref=doc(cloudDb,"users",cloudUser.uid,"app","izharPavers");
@@ -3169,26 +3192,23 @@ async function pullOrMigrateCloudData(){
     if(snap.exists() && snap.data()?.payload){
       const data=snap.data();
       const payload=JSON.parse(data.payload);
-      // Preserve all existing cloud documents. Older builds attempted to clear
-      // the first 4-5 saved documents here; that was unsafe because a real user's
-      // documents could be mistaken for samples. This version never deletes cloud
-      // documents during login.
-      if(data.legacyDocumentsCleanedV1 !== true){
-        await setDoc(ref,{legacyDocumentsCleanedV1:true,updatedAt:new Date().toISOString(),email:cloudUser.email||""},{merge:true});
-      }
-      applyCloudPayload(payload);
+      // IMPORTANT: merge instead of replacing localStorage. This prevents an older
+      // cloud snapshot from making newly-saved local documents disappear on reload.
+      mergeCloudPayloadSafely(payload);
+      // Push the merged result back so both devices converge on the same set.
+      await pushCloudData();
       if(typeof renderSavedDocuments==="function")renderSavedDocuments();
       if(typeof loadReferenceSettings==="function")loadReferenceSettings();
       if(typeof loadProfileSettings==="function")loadProfileSettings();
       if(typeof loadTermsFontSizeSettings==="function")loadTermsFontSizeSettings();
       if(typeof renderMaterialManager==="function")renderMaterialManager();
-      setCloudMessage("Cloud data loaded successfully.");
+      setCloudMessage("Cloud data loaded and safely merged with this device.");
     }else{
       await pushCloudData();
       setCloudMessage("Local data has been saved to your cloud account.");
     }
     updateCloudUI();
-  }catch(e){ console.error(e); setCloudMessage("Unable to load cloud data: "+e.message); }
+  }catch(e){ console.error(e); setCloudMessage("Cloud sync unavailable; local documents remain محفوظ on this device."); }
 }
 async function pushCloudData(){
   if(!cloudUser||!cloudDb)return;
