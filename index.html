@@ -1698,7 +1698,8 @@ function currentDocumentData(){
   if(!documentProfile) documentProfile=getProfileSettings();
   activeDocumentProfileSnapshot=JSON.parse(JSON.stringify(documentProfile));
   return {
-    id:Date.now().toString()+"_"+Math.random().toString(36).slice(2,8),
+    // Unique immutable ID for every newly created document.
+    id:(currentEditingDocumentId || ("doc_"+Date.now().toString()+"_"+Math.random().toString(36).slice(2,10))),
     ref:clean(document.getElementById("ref").value),
     customRef:clean(document.getElementById("customRef")?.value||""),
     date:document.getElementById("date").value,
@@ -1752,7 +1753,9 @@ function saveCurrentDocument(silent=false){
   if(currentEditingDocumentId){
     index=list.findIndex(x=>String(x.id)===String(currentEditingDocumentId));
   }
-  if(index<0) index=list.findIndex(x=>x.subject===subject && x.ref===ref);
+  // A brand-new document must NEVER overwrite another document just because
+  // its subject/reference happens to match. Only an explicitly opened document
+  // (currentEditingDocumentId) may be updated.
   if(index>=0){
     doc.id=list[index].id;
     // Preserve the original creation/order metadata even when an existing
@@ -2366,7 +2369,9 @@ async function generatePDF(openPdf=false, printOnly=false, persist=true){
     const footerDesignation=clean(profile.designation)||"SALE & MARKETING OFFICER (PAVERS)";
     const footerPhone=clean(profile.phone)||"0308-0620710";
     const footerCompany=clean(profile.companyLine)||"For IZHAR PAVERS (PVT) LIMITED";
-    const footerSignOff=!!profile.computerGeneratedEnabled;
+    // Checkbox "Signature OFF" = true means signature image must NOT be drawn.
+    const isSignatureOff=!!profile.computerGeneratedEnabled;
+    const footerSignOff=isSignatureOff;
 
     // The company line is the TOP ANCHOR. Everything else is positioned from
     // the previous element's real height, so a signature can never collide with
@@ -2384,9 +2389,14 @@ async function generatePDF(openPdf=false, printOnly=false, persist=true){
     const companyLineH=companySize*1.2;
     const companyH=Math.max(companyLineH,companyLines.length*companyLineH);
 
+    // Company line: draw ONLY the text. No rectangle, icon or bullet is drawn
+    // beside/before it, which removes the stray blue mark.
     drawText(page,times,"Yours Truly,",footerX,footerTopAnchor,11.5);
     companyLines.forEach((ln,i)=>{
-      drawText(page,timesB,ln,footerX,companyTop+i*companyLineH,companySize,{maxWidth:companyMaxWidth});
+      drawText(page,timesB,ln,footerX,companyTop+i*companyLineH,companySize,{
+        maxWidth:companyMaxWidth,
+        color:rgb(0.04,0.18,0.41)
+      });
     });
 
     let currentTop=companyTop+companyH+10;
@@ -2438,23 +2448,25 @@ async function generatePDF(openPdf=false, printOnly=false, persist=true){
     drawText(page,times,footerDesignation,footerX,designationTop,8.5,{maxWidth:330});
     drawText(page,times,`Cell: ${footerPhone}`,footerX,phoneTop,8.5,{maxWidth:180});
 
-    // Stamp/seal is anchored to the text block, not to a fixed page Y. This
-    // keeps it side-by-side with the signature details in both ON and OFF modes.
+    // Stamp / seal: keep it to the right of the signatory block and just
+    // above the office/branch line. It is deliberately NOT tied to the
+    // "LIMITED" company-line baseline, preventing overlap.
     try{
       const stampData=profile.stampData||DEFAULT_STAMP_DATA;
       const stampB64=String(stampData).split(',')[1]||'';
       const stampBytes=Uint8Array.from(atob(stampB64),c=>c.charCodeAt(0));
       const stampImg=await pdf.embedPng(stampBytes);
       const iw=stampImg.width||100, ih=stampImg.height||100;
-      const maxStampW=92, maxStampH=92;
+      const maxStampW=85, maxStampH=85;
       const stampRatio=Math.min(maxStampW/iw,maxStampH/ih);
       const stampW=Math.max(1,iw*stampRatio), stampH=Math.max(1,ih*stampRatio);
-      // Keep the stamp in the same position as the original document template.
-      // pdf-lib uses bottom-origin Y coordinates; y=108 keeps it only a little
-      // above the Karachi/Islamabad/Faisalabad/Jauharabad/Hatar footer line.
+
+      // Top-origin position: the stamp sits slightly above the Karachi /
+      // Islamabad / Faisalabad / Jauharabad / Hatar line.
+      const stampTop=Math.max(companyTop+companyH+8, officeTop-stampH-3);
       page.drawImage(stampImg,{
-        x:footerRightX,
-        y:108,
+        x:380,
+        y:yTop(pageH,stampTop,stampH),
         width:stampW,
         height:stampH,
         opacity:0.85
