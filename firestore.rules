@@ -45,18 +45,16 @@ service cloud.firestore {
         && request.resource.data.ownerEmail == 'talhakhan14746@gmail.com'
         && validAdminList(request.resource.data);
 
-      // The bootstrap Owner can also repair/migrate an old authorization
-      // document that does not yet contain the new adminEmails structure.
-      // Ownership transfer is still handled separately below.
+      // Bootstrap Owner can repair/migrate the authorization document,
+      // but cannot use this rule to directly change ownership.
       allow update: if bootstrapOwner()
         && request.resource.data.ownerEmail == 'talhakhan14746@gmail.com'
         && validAdminList(request.resource.data);
 
-      // Existing Owner/Admin accounts may update authorization/admin data.
-      // The Owner is the only account allowed to change the ownerEmail.
       allow update: if currentAdmin()
         && validAdminList(request.resource.data)
         && (
+          // Normal authorization/admin changes: ownership stays unchanged.
           (
             request.resource.data.ownerEmail == resource.data.ownerEmail
             && (
@@ -65,11 +63,19 @@ service cloud.firestore {
             )
           )
           ||
+          // SAFE OWNERSHIP ACCEPTANCE:
+          // The existing Owner must first create a pending transfer.
+          // Only the exact Gmail named in that pending request can accept it.
           (
             currentOwner()
             && request.resource.data.ownerEmail != resource.data.ownerEmail
+            && request.resource.data.ownerEmail == request.auth.token.email
             && request.resource.data.ownerEmail in request.resource.data.adminEmails
             && request.resource.data.authorizedEmails.hasAll([request.resource.data.ownerEmail])
+            && 'pendingOwnershipTransfer' in resource.data
+            && resource.data.pendingOwnershipTransfer.status == 'pending'
+            && resource.data.pendingOwnershipTransfer.email == request.auth.token.email
+            && request.resource.data.pendingOwnershipTransfer == null
           )
         );
 
