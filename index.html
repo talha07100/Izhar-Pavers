@@ -2397,40 +2397,30 @@ async function generatePDF(openPdf=false, printOnly=false, persist=true){
     }
 
     // Dynamic document footer / signature block.
-    // IMPORTANT: this block uses ONLY the frozen profile snapshot belonging to
-    // this document. Opening an older quotation must never pick up the current
-    // Settings profile.
-    // The original Word/PDF template contains an old signature + stamp in the footer.
-    // Cover the complete footer width so NO fragment of the old signature can leak
-    // through beside the company line. The current document profile is redrawn below.
-    white(page,0,635,pageW,210);
+    // IMPORTANT: the footer is rebuilt from the document's frozen profile snapshot.
+    // Clear the entire old template footer first.  The old template contained a
+    // second "Yours Truly" and old signature/stamp, which could otherwise leak
+    // through when a new profile is rendered.
+    white(page,0,600,pageW,245);
 
     const footerName=clean(profile.name)||"TALHA KHAN";
     const footerDesignation=clean(profile.designation)||"SALE & MARKETING OFFICER (PAVERS)";
     const footerPhone=clean(profile.phone)||"0308-0620710";
     const footerCompany=clean(profile.companyLine)||"For IZHAR PAVERS (PVT) LIMITED";
-    // Checkbox "Signature OFF" = true means signature image must NOT be drawn.
-    const isSignatureOff=!!profile.computerGeneratedEnabled;
-    const footerSignOff=isSignatureOff;
+    const footerSignOff=!!profile.computerGeneratedEnabled;
 
-    // The company line is the TOP ANCHOR. Everything else is positioned from
-    // the previous element's real height, so a signature can never collide with
-    // the name/designation/phone block.
+    // Fixed footer layout with dynamic vertical flow.  The signature and stamp
+    // are on the same visual level; all text is given enough clearance so that
+    // nothing can overlap or be clipped.
     const footerX=72;
-    // Match the original/template stamp position: beside the signature block,
-    // just above the Karachi/Islamabad/Faisalabad/Jauharabad/Hatar footer line.
-    const footerRightX=245;
-    const footerBottomTop=817;
-    const footerTopAnchor=652;
+    const footerTopAnchor=646;
     const companyTop=footerTopAnchor+18;
     const companySize=11.5;
-    const companyMaxWidth=320;
+    const companyMaxWidth=300;
     const companyLines=wrapLines(footerCompany,timesB,companySize,companyMaxWidth);
     const companyLineH=companySize*1.2;
     const companyH=Math.max(companyLineH,companyLines.length*companyLineH);
 
-    // Company line: draw ONLY the text. No rectangle, icon or bullet is drawn
-    // beside/before it, which removes the stray blue mark.
     drawText(page,times,"Yours Truly,",footerX,footerTopAnchor,11.5);
     companyLines.forEach((ln,i)=>{
       drawText(page,timesB,ln,footerX,companyTop+i*companyLineH,companySize,{
@@ -2439,13 +2429,12 @@ async function generatePDF(openPdf=false, printOnly=false, persist=true){
       });
     });
 
-    let currentTop=companyTop+companyH+10;
+    let currentTop=companyTop+companyH+8;
     let signatureDrawn=false;
     let signatureW=0, signatureH=0;
 
-    // Signature ON: load and crop the saved signature image, then scale it to
-    // a predictable maximum size. The next text position is calculated from
-    // the actual rendered height (not a hard-coded Y coordinate).
+    // Signature sits directly below the company line.  Its actual rendered
+    // height controls the following text, preventing overlap on every profile.
     if(!footerSignOff){
       try{
         const signatureData=await cropTransparentImageData(await cleanSignatureImageData(profile.signatureData||DEFAULT_SIGNATURE_DATA));
@@ -2454,7 +2443,7 @@ async function generatePDF(openPdf=false, printOnly=false, persist=true){
           const sigBytes=Uint8Array.from(atob(sigB64),c=>c.charCodeAt(0));
           const sigImg=await pdf.embedPng(sigBytes);
           const iw=sigImg.width||300, ih=sigImg.height||100;
-          const maxW=190, maxH=34;
+          const maxW=185, maxH=34;
           const ratio=Math.min(maxW/iw,maxH/ih);
           signatureW=Math.max(1,iw*ratio);
           signatureH=Math.max(1,ih*ratio);
@@ -2465,63 +2454,45 @@ async function generatePDF(openPdf=false, printOnly=false, persist=true){
             height:signatureH
           });
           signatureDrawn=true;
-          currentTop+=signatureH+9;
-        } else {
-          currentTop+=18;
+          currentTop+=signatureH+7;
+        }else{
+          currentTop+=8;
         }
       }catch(e){
         console.warn("Document signature render failed:",e);
-        currentTop+=18;
+        currentTop+=8;
       }
     }else{
-      // Signature OFF: deliberately shrink the signature area rather than
-      // leaving the old signature gap behind.
-      currentTop+=8;
+      currentTop+=4;
     }
 
-    // Name, designation and phone always follow the calculated signature
-    // position. Their positions therefore remain stable relative to the sign.
     const nameTop=currentTop;
-    const designationTop=nameTop+19;
-    const phoneTop=designationTop+16;
+    const designationTop=nameTop+17;
+    const phoneTop=designationTop+15;
     drawText(page,timesB,footerName,footerX,nameTop,9.5,{maxWidth:250});
     drawText(page,times,footerDesignation,footerX,designationTop,8.5,{maxWidth:330});
     drawText(page,times,`Cell: ${footerPhone}`,footerX,phoneTop,8.5,{maxWidth:180});
 
-    // Stamp / seal: keep it to the right of the signatory block and just
-    // above the office/branch line. It is deliberately NOT tied to the
-    // "LIMITED" company-line baseline, preventing overlap.
+    // Keep the stamp beside the signature/name block, not underneath it.
+    // Its right edge stays comfortably inside the page and away from text.
     const officeLine="Karachi, Islamabad, Faisalabad, Jauharabad, Hatar";
-    // Define the computer-generated note position BEFORE calculating the office
-    // line.  The previous build referenced noteTop before its declaration, which
-    // caused the mobile browser error: "Cannot access 'noteTop' before initialization".
-    let noteTop=phoneTop+17;
-    if(footerSignOff){
-      const refNow=clean(document.getElementById("ref").value);
-      const savedNote=clean(profile.computerGeneratedText);
-      const finalNote=savedNote
-        ? savedNote.replace(/Ref#(?:\s*)/i,`Ref#${refNow?" "+refNow:""}`)
-        : `This is a computer-generated document issued under Ref#${refNow?" "+refNow:""} and does not require a signature.`;
-      const noteLines=wrapLines(finalNote,timesI,7.8,450);
-      noteLines.forEach((ln,i)=>drawText(page,timesI,ln,footerX,noteTop+i*10,7.8,{maxWidth:450,color:rgb(0.3,0.3,0.3)}));
-      noteTop+=Math.max(10,noteLines.length*10)+8;
-    }
-    const officeTop=Math.min(footerBottomTop,noteTop);
+    const officeTop=805;
     try{
       const stampData=profile.stampData||DEFAULT_STAMP_DATA;
       const stampB64=String(stampData).split(',')[1]||'';
       const stampBytes=Uint8Array.from(atob(stampB64),c=>c.charCodeAt(0));
       const stampImg=await pdf.embedPng(stampBytes);
       const iw=stampImg.width||100, ih=stampImg.height||100;
-      const maxStampW=85, maxStampH=85;
+      const maxStampW=78, maxStampH=78;
       const stampRatio=Math.min(maxStampW/iw,maxStampH/ih);
       const stampW=Math.max(1,iw*stampRatio), stampH=Math.max(1,ih*stampRatio);
 
-      // Top-origin position: the stamp sits slightly above the Karachi /
-      // Islamabad / Faisalabad / Jauharabad / Hatar line.
-      const stampTop=Math.max(companyTop+companyH+8, officeTop-stampH-3);
+      // Place stamp at the same vertical level as the handwritten signature.
+      // If the signature area becomes taller, move the stamp down just enough
+      // to remain aligned without entering the office line.
+      const stampTop=Math.min(officeTop-stampH-8, Math.max(companyTop+companyH+4, currentTop-signatureH-2));
       page.drawImage(stampImg,{
-        x:380,
+        x:390,
         y:yTop(pageH,stampTop,stampH),
         width:stampW,
         height:stampH,
@@ -2531,7 +2502,20 @@ async function generatePDF(openPdf=false, printOnly=false, persist=true){
       console.warn("Document stamp render failed:",e);
     }
 
-    // Keep the branch/location line below the dynamically-sized footer content.
+    // Computer-generated note is placed only when signature is OFF.  It has its
+    // own vertical area and can never collide with the stamp or office line.
+    let noteTop=phoneTop+16;
+    if(footerSignOff){
+      const refNow=clean(document.getElementById("ref").value);
+      const savedNote=clean(profile.computerGeneratedText);
+      const finalNote=savedNote
+        ? savedNote.replace(/Ref#(?:\s*)/i,`Ref#${refNow?" "+refNow:""}`)
+        : `This is a computer-generated document issued under Ref#${refNow?" "+refNow:""} and does not require a signature.`;
+      const noteLines=wrapLines(finalNote,timesI,7.8,450);
+      noteLines.forEach((ln,i)=>drawText(page,timesI,ln,footerX,noteTop+i*10,7.8,{maxWidth:450,color:rgb(0.3,0.3,0.3)}));
+      noteTop+=Math.max(10,noteLines.length*10)+5;
+    }
+
     drawText(page,timesB,officeLine,350,officeTop,8.5,{maxWidth:200});
 
     if(!footerSignOff && !signatureDrawn){
