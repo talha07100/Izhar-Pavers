@@ -2841,10 +2841,10 @@ function renderAuthorizationUI(){
   const pendingBox=document.getElementById("pendingOwnershipTransfer");
   if(pendingBox){
     const pending=authorizationConfig.pendingOwnershipTransfer;
-    if(pending && pending.status==="pending" && pending.email && isOwner){
+    if(pending && (pending.status==="pending" || pending.status==="accepted") && pending.email && isOwner){
       const pe=escapeHtml(normalizeEmail(pending.email));
       pendingBox.style.display="block";
-      pendingBox.innerHTML=`<strong>⏳ Pending transfer:</strong> ${pe}<br><span style="display:inline-block;margin-top:5px">The new Owner must sign in and accept.</span><br><button class="btn danger" style="margin-top:8px" type="button" onclick="cancelOwnershipTransfer()">Cancel Transfer</button>`;
+      pendingBox.innerHTML=`<strong>⏳ Pending transfer:</strong> ${pe}<br><span style="display:inline-block;margin-top:5px">The new Owner must sign in and accept first.</span><br><button class="btn danger" style="margin-top:8px" type="button" onclick="cancelOwnershipTransfer()">Cancel Transfer</button><button class="btn primary" style="margin-top:8px;margin-left:6px" type="button" onclick="completePendingOwnershipTransfer()">Complete Ownership Transfer</button>`;
     }else{ pendingBox.style.display="none"; }
   }
   renderAuthorizationList();
@@ -3057,63 +3057,315 @@ function maybeShowPendingOwnershipAcceptance(){
   }
 }
 
+function ownershipRequestDocId(email){
+  return normalizeEmail(email);
+}
+
+async function saveOwnershipRequest(request){
+  if(!cloudDb) throw new Error("Firebase Firestore is not connected. Please make sure Firestore Database is enabled.");
+  const id=ownershipRequestDocId(request.newOwnerEmail);
+  await withTimeout(
+    setDoc(doc(cloudDb,"ownershipRequests",id),request,{merge:false}),
+    8000,
+    "Ownership request save"
+  );
+  return id;
+}
+
+async function loadOwnershipRequest(email){
+  if(!cloudDb) return null;
+  const id=ownershipRequestDocId(email);
+  try{
+    const snap=await withTimeout(
+      getDoc(doc(cloudDb,"ownershipRequests",id)),
+      6000,
+      "Ownership request load"
+    );
+    return snap.exists() ? (snap.data()||null) : null;
+  }catch(e){
+    console.warn("Ownership request load failed:",e);
+    return null;
+  }
+}
+
 window.transferAdminOwnership=async function(){
   if(!isOwnerAccount()){ alert("Only the current Owner can change ownership."); return; }
+
   const input=document.getElementById("newOwnerEmailInput");
   const newOwner=normalizeEmail(input?.value);
   const oldOwner=getCurrentOwnerEmail();
+
   if(!newOwner){ alert("Please enter the new Owner Gmail address."); return; }
-  if(!/^[-a-z0-9._%+]+@gmail\.com$/i.test(newOwner)){ alert("Please enter a valid Gmail address, for example: example@gmail.com"); return; }
-  if(newOwner===oldOwner){ alert("This account is already the current Owner."); return; }
-  if(!cloudDb || !cloudUser){ alert("Google/Firebase is not ready. Please wait until Cloud sync is active and try again."); return; }
-  if(!authorizationChecked){ alert("Authorization is still loading. Please wait a moment and try again."); return; }
-  if(authorizationConfig.pendingOwnershipTransfer?.status==="pending"){ alert("A transfer is already pending. Cancel it first before creating another one."); return; }
-  const pendingTransfer={email:newOwner,status:"pending",requestedBy:oldOwner,requestedAt:new Date().toISOString()};
-  const nextConfig={...authorizationConfig,ownerEmail:oldOwner,pendingOwnershipTransfer:pendingTransfer,updatedAt:new Date().toISOString()};
+  if(!/^[-a-z0-9._%+]+@gmail\.com$/i.test(newOwner)){
+    alert("Please enter a valid Gmail address, for example: example@gmail.com");
+    return;
+  }
+  if(newOwner===oldOwner){
+    alert("This account is already the current Owner.");
+    return;
+  }
+  if(!cloudDb || !cloudUser){
+    alert("Firebase/Google is not ready. Please wait until Cloud sync is active.");
+    return;
+  }
+  if(!authorizationChecked){
+    alert("Authorization is still loading. Please wait a moment and try again.");
+    return;
+  }
+
+  const existing=await loadOwnershipRequest(newOwner);
+  if(existing?.status==="pending"){
+    alert("A transfer request is already pending for this Gmail. Cancel it first.");
+    return;
+  }
+
+  if(!confirm(
+    "Send ownership request to\n\n"+newOwner+
+    "?\n\nOwnership will NOT change now. The new Gmail must sign in and accept first."
+  )) return;
+
+  const request={
+    status:"pending",
+    oldOwnerEmail:oldOwner,
+    newOwnerEmail:newOwner,
+    requestedAt:new Date().toISOString(),
+    acceptedAt:null,
+    completedAt:null
+  };
+
   try{
-    // Save only after a simple confirmation. The Owner remains Owner until acceptance.
-    if(!confirm("Send ownership request to\n\n"+newOwner+"?\n\nOwnership will NOT change now. The new Gmail must sign in with Google and press Accept Ownership.")) return;
-    await withTimeout(setDoc(doc(cloudDb,"appConfig","authorization"),nextConfig,{merge:true}),10000,"Ownership request save");
+    await saveOwnershipRequest(request);
+
+    // Keep a local copy only for the current Owner's UI.
+    const nextConfig={
+      ...authorizationConfig,
+      ownerEmail:oldOwner,
+      pendingOwnershipTransfer:{
+        email:newOwner,
+        status:"pending",
+        requestedBy:oldOwner,
+        requestedAt:request.requestedAt
+      },
+      updatedAt:new Date().toISOString()
+    };
     authorizationConfig=nextConfig;
     localStorage.setItem("izhar_pavers_authorization_config_v1",JSON.stringify(nextConfig));
     mirrorAuthorizationLocalStorage();
     if(input) input.value="";
     renderAuthorizationUI();
-    alert("Ownership request sent successfully.\n\nThe new Gmail must sign in with Google and accept it. You remain the Owner until then.");
+
+    alert(
+      "Ownership request sent successfully.\n\n"+
+      "New Gmail: "+newOwner+
+      "\n\nThe new Gmail must sign in and press Accept Ownership."
+    );
   }catch(e){
     console.error("Ownership request failed:",e);
     const msg=String(e?.message||e||"Unknown error");
-    alert("Ownership request could not be saved.\n\n"+msg+"\n\nNo ownership was changed.");
+    alert(
+      "Ownership request could not be saved.\n\n"+
+      msg+
+      "\n\nNo ownership was changed."
+    );
   }
 };
 
 window.cancelOwnershipTransfer=async function(){
-  if(!isOwnerAccount()){ alert("Only the current Owner can cancel the pending transfer."); return; }
-  const pending=authorizationConfig.pendingOwnershipTransfer; if(!pending?.email) return;
+  if(!isOwnerAccount()){
+    alert("Only the current Owner can cancel the pending transfer.");
+    return;
+  }
+
+  const pending=authorizationConfig.pendingOwnershipTransfer;
+  if(!pending?.email) return;
+
   if(!confirm("Cancel the pending ownership transfer to "+pending.email+"?")) return;
-  const nextConfig={...authorizationConfig,pendingOwnershipTransfer:null,updatedAt:new Date().toISOString()};
+
   try{
-    await withTimeout(setDoc(doc(cloudDb,"appConfig","authorization"),nextConfig,{merge:true}),15000,"Cancel ownership transfer");
-    authorizationConfig=nextConfig; localStorage.setItem("izhar_pavers_authorization_config_v1",JSON.stringify(nextConfig)); mirrorAuthorizationLocalStorage(); renderAuthorizationUI(); setCloudMessage("Pending ownership transfer cancelled.");
-  }catch(e){ alert("Could not cancel the transfer: "+(e?.message||e)); }
+    if(cloudDb){
+      await withTimeout(
+        setDoc(
+          doc(cloudDb,"ownershipRequests",ownershipRequestDocId(pending.email)),
+          {status:"cancelled",cancelledAt:new Date().toISOString()},
+          {merge:true}
+        ),
+        8000,
+        "Cancel ownership transfer"
+      );
+    }
+
+    authorizationConfig={
+      ...authorizationConfig,
+      pendingOwnershipTransfer:null,
+      updatedAt:new Date().toISOString()
+    };
+    localStorage.setItem("izhar_pavers_authorization_config_v1",JSON.stringify(authorizationConfig));
+    mirrorAuthorizationLocalStorage();
+    renderAuthorizationUI();
+    setCloudMessage("Pending ownership transfer cancelled.");
+  }catch(e){
+    alert("Could not cancel the transfer: "+(e?.message||e));
+  }
 };
 
 window.acceptPendingOwnershipTransfer=async function(){
-  if(!cloudUser || !cloudDb){ alert("Please sign in with Google first."); return; }
-  const pending=authorizationConfig.pendingOwnershipTransfer; const email=normalizeEmail(cloudUser.email);
-  if(!pending || pending.status!=="pending" || normalizeEmail(pending.email)!==email){ alert("There is no pending ownership transfer for this Gmail account."); return; }
-  const oldOwner=getCurrentOwnerEmail();
-  if(!oldOwner || oldOwner===email){ alert("This account is already the Owner."); return; }
-  if(!confirm("Accept ownership of Izhar Pavers for "+email+"?\n\nYou will become the Owner. The previous Owner will remain an Admin for backup access.")) return;
-  const existingAdmins=getAdminEmails().filter(Boolean);
-  const nextAdmins=[...new Set([email,oldOwner,...existingAdmins.filter(e=>e!==email && e!==oldOwner)])].slice(0,4);
-  const nextAuthorized=[...new Set([...(authorizationConfig.authorizedEmails||[]).map(normalizeEmail).filter(Boolean),oldOwner,email])];
-  const nextConfig={ownerEmail:email,enabled:!!authorizationConfig.enabled,authorizedEmails:nextAuthorized,adminEmails:nextAdmins,pendingOwnershipTransfer:null,updatedAt:new Date().toISOString(),previousOwnerEmail:oldOwner};
+  if(!cloudUser || !cloudDb){
+    alert("Please sign in with Google first.");
+    return;
+  }
+
+  const email=normalizeEmail(cloudUser.email);
+  const request=await loadOwnershipRequest(email);
+
+  if(!request || request.status!=="pending" ||
+     normalizeEmail(request.newOwnerEmail)!==email){
+    alert("There is no pending ownership transfer for this Gmail.");
+    return;
+  }
+
+  const oldOwner=normalizeEmail(request.oldOwnerEmail);
+  if(!oldOwner || oldOwner===email){
+    alert("This ownership request is invalid.");
+    return;
+  }
+
+  if(!confirm(
+    "Accept ownership for "+email+
+    "?\n\nYou will NOT become Owner until the current Owner completes the final transfer."
+  )) return;
+
   try{
-    await withTimeout(setDoc(doc(cloudDb,"appConfig","authorization"),nextConfig,{merge:true}),20000,"Accept ownership");
-    authorizationConfig=nextConfig; localStorage.setItem("izhar_pavers_authorization_config_v1",JSON.stringify(nextConfig)); mirrorAuthorizationLocalStorage(); renderAuthorizationUI(); setCloudMessage("Ownership accepted successfully. You are now the Owner."); alert("Ownership accepted successfully. You are now the Owner.");
-  }catch(e){ console.error(e); alert("Ownership acceptance failed: "+(e?.message||e)); }
+    await withTimeout(
+      setDoc(
+        doc(cloudDb,"ownershipRequests",ownershipRequestDocId(email)),
+        {status:"accepted",acceptedAt:new Date().toISOString()},
+        {merge:true}
+      ),
+      8000,
+      "Ownership acceptance"
+    );
+
+    alert(
+      "Ownership accepted.\n\n"+
+      "Now the current Owner must open Admin Management and press "+
+      "\"Complete Ownership Transfer\"."
+    );
+    setCloudMessage("Ownership accepted. Waiting for the current Owner to complete the transfer.");
+  }catch(e){
+    alert("Ownership acceptance failed: "+(e?.message||e));
+  }
 };
+
+window.completePendingOwnershipTransfer=async function(){
+  if(!isOwnerAccount()){
+    alert("Only the current Owner can complete the transfer.");
+    return;
+  }
+
+  const pending=authorizationConfig.pendingOwnershipTransfer;
+  if(!pending?.email){
+    alert("There is no pending ownership transfer.");
+    return;
+  }
+
+  const request=await loadOwnershipRequest(pending.email);
+  if(!request || request.status!=="accepted"){
+    alert("The new Owner has not accepted the request yet.");
+    return;
+  }
+
+  const email=normalizeEmail(request.newOwnerEmail);
+  const oldOwner=getCurrentOwnerEmail();
+
+  if(!email || email===oldOwner){
+    alert("Invalid ownership request.");
+    return;
+  }
+
+  if(!confirm(
+    "Complete ownership transfer to "+email+
+    "?\n\nThe new Gmail will become Owner and you will remain an Admin."
+  )) return;
+
+  const existingAdmins=getAdminEmails().filter(Boolean);
+  const nextAdmins=[...new Set([
+    email,
+    oldOwner,
+    ...existingAdmins.filter(e=>e!==email && e!==oldOwner)
+  ])].slice(0,4);
+
+  const nextAuthorized=[...new Set([
+    ...(authorizationConfig.authorizedEmails||[]).map(normalizeEmail).filter(Boolean),
+    oldOwner,
+    email
+  ])];
+
+  const nextConfig={
+    ownerEmail:email,
+    enabled:!!authorizationConfig.enabled,
+    authorizedEmails:nextAuthorized,
+    adminEmails:nextAdmins,
+    pendingOwnershipTransfer:null,
+    updatedAt:new Date().toISOString(),
+    previousOwnerEmail:oldOwner
+  };
+
+  try{
+    // Final ownership write is performed by the current Owner.
+    await withTimeout(
+      setDoc(doc(cloudDb,"appConfig","authorization"),nextConfig,{merge:true}),
+      10000,
+      "Complete ownership transfer"
+    );
+
+    await withTimeout(
+      setDoc(
+        doc(cloudDb,"ownershipRequests",ownershipRequestDocId(email)),
+        {status:"completed",completedAt:new Date().toISOString()},
+        {merge:true}
+      ),
+      8000,
+      "Ownership request completion"
+    );
+
+    authorizationConfig=nextConfig;
+    localStorage.setItem("izhar_pavers_authorization_config_v1",JSON.stringify(nextConfig));
+    mirrorAuthorizationLocalStorage();
+    renderAuthorizationUI();
+
+    alert(
+      "Ownership transferred successfully to "+email+
+      ".\n\nYou remain an Admin for backup access."
+    );
+  }catch(e){
+    console.error("Complete ownership transfer failed:",e);
+    alert("Ownership could not be completed: "+(e?.message||e));
+  }
+};
+
+async function refreshPendingOwnershipFromCloud(){
+  if(!cloudUser || !cloudDb) return;
+  const email=normalizeEmail(cloudUser.email);
+  if(!email) return;
+  // Current owner checks the request for the target Gmail; pending owner checks their own.
+  const target = isOwnerAccount() ? normalizeEmail(authorizationConfig.pendingOwnershipTransfer?.email) : email;
+  if(!target) return;
+  const req=await loadOwnershipRequest(target);
+  if(!req) return;
+  if(req.status==="pending" || req.status==="accepted"){
+    if(isOwnerAccount() && normalizeEmail(req.oldOwnerEmail)===getCurrentOwnerEmail()){
+      authorizationConfig.pendingOwnershipTransfer={
+        email:normalizeEmail(req.newOwnerEmail),
+        status:req.status==="accepted" ? "accepted" : "pending",
+        requestedBy:normalizeEmail(req.oldOwnerEmail),
+        requestedAt:req.requestedAt||new Date().toISOString()
+      };
+      localStorage.setItem("izhar_pavers_authorization_config_v1",JSON.stringify(authorizationConfig));
+      mirrorAuthorizationLocalStorage();
+      renderAuthorizationUI();
+    }
+  }
+}
 
 window.refreshAuthorizationSettings=async function(){
   if(!isAdminAccount()){ setCloudMessage("Only an Admin can manage authorization."); return; }
@@ -3155,6 +3407,7 @@ async function initFirebase(){
             updateCloudUI();
             closeCloudLogin();
             maybeShowPendingOwnershipAcceptance();
+            try{ await refreshPendingOwnershipFromCloud(); }catch(e){ console.warn("Pending ownership refresh:",e); }
 
             // Load/sync cloud data in the background. A slow Firestore connection
             // must not block the rest of the app.
