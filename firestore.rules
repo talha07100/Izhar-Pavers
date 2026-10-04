@@ -88,16 +88,16 @@ service cloud.firestore {
         && !request.resource.data.adminEmails.hasAny([resource.data.ownerEmail])
         && !request.resource.data.authorizedEmails.hasAny([resource.data.ownerEmail])
         && validAdminList(request.resource.data)
-        && exists(/databases/$(database)/documents/appConfig/ownershipTransfers/$(request.auth.token.email))
-        && getAfter(/databases/$(database)/documents/appConfig/ownershipTransfers/$(request.auth.token.email)).data.status == 'accepted'
-        && getAfter(/databases/$(database)/documents/appConfig/ownershipTransfers/$(request.auth.token.email)).data.toOwnerEmail == request.auth.token.email
-        && getAfter(/databases/$(database)/documents/appConfig/ownershipTransfers/$(request.auth.token.email)).data.fromOwnerEmail == resource.data.ownerEmail
-        && getAfter(/databases/$(database)/documents/appConfig/ownershipTransfers/$(request.auth.token.email)).data.fromOwnerUid == resource.data.ownerUid;
+        && exists(/databases/$(database)/documents/ownershipTransfers/$(request.auth.token.email))
+        && getAfter(/databases/$(database)/documents/ownershipTransfers/$(request.auth.token.email)).data.status == 'accepted'
+        && getAfter(/databases/$(database)/documents/ownershipTransfers/$(request.auth.token.email)).data.toOwnerEmail == request.auth.token.email
+        && getAfter(/databases/$(database)/documents/ownershipTransfers/$(request.auth.token.email)).data.fromOwnerEmail == resource.data.ownerEmail
+        && getAfter(/databases/$(database)/documents/ownershipTransfers/$(request.auth.token.email)).data.fromOwnerUid == resource.data.ownerUid;
 
       allow delete: if false;
     }
 
-    match /appConfig/ownershipTransfers/{targetEmail} {
+    match /ownershipTransfers/{targetEmail} {
       // Current Owner creates a request. No secondary login or target UID
       // is needed; the target must later sign in with this exact Gmail.
       allow create: if currentOwner()

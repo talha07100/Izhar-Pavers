@@ -3057,26 +3057,13 @@ window.transferAdminOwnership=async function(){
   try{
     const now=new Date().toISOString();
     const currentUid=cloudUser.uid;
-    const requestRef=doc(cloudDb,"appConfig","ownershipTransfers",newOwner);
-    const currentAuthorized=[...(authorizationConfig.authorizedEmails||[]).map(normalizeEmail).filter(Boolean)];
-    const nextAuthorized=[...new Set([...currentAuthorized,newOwner])];
-    authorizationConfig.authorizedEmails=nextAuthorized;
-    authorizationConfig.ownerEmail=oldOwner;
-    authorizationConfig.ownerUid=currentUid;
-    authorizationConfig.updatedAt=now;
+    const requestRef=doc(cloudDb,"ownershipTransfers",newOwner);
+    // Sending a request must NOT change ownership or authorization.
+    // The authorization document is changed only after the new Owner accepts.
 
     // Simple request model: no secondary Firebase app, no second popup,
     // and no target UID is required. The new Owner must sign in with the
     // exact requested Gmail before the Accept button is shown.
-    await setDoc(doc(cloudDb,"appConfig","authorization"),{
-      ownerEmail:oldOwner,
-      ownerUid:currentUid,
-      enabled:!!authorizationConfig.enabled,
-      authorizedEmails:nextAuthorized,
-      adminEmails:getAdminEmails(),
-      updatedAt:now
-    },{merge:true});
-
     await setDoc(requestRef,{
       status:"pending",
       fromOwnerEmail:oldOwner,
@@ -3086,8 +3073,6 @@ window.transferAdminOwnership=async function(){
       updatedAt:now
     },{merge:false});
 
-    localStorage.setItem("izhar_pavers_authorization_config_v1",JSON.stringify(authorizationConfig));
-    mirrorAuthorizationLocalStorage();
     if(input)input.value="";
     renderAuthorizationUI();
     setCloudMessage("Ownership request sent to "+newOwner+". Waiting for acceptance.");
@@ -3121,17 +3106,10 @@ async function rejectOwnershipTransfer(){
   const email=normalizeEmail(cloudUser.email);
   if(email!==normalizeEmail(data.toOwnerEmail))return;
   try{
-    const authRef=doc(cloudDb,"appConfig","authorization");
-    const reqRef=doc(cloudDb,"appConfig","ownershipTransfers",email);
-    const snap=await getDoc(authRef);
-    if(!snap.exists())throw new Error("Authorization settings were not found.");
-    const cfg=snap.data()||{};
-    const owner=normalizeEmail(cfg.ownerEmail);
-    const auths=(Array.isArray(cfg.authorizedEmails)?cfg.authorizedEmails:[]).map(normalizeEmail).filter(e=>e && e!==email);
-    const batch=writeBatch(cloudDb);
-    batch.update(reqRef,{status:"rejected",updatedAt:new Date().toISOString()});
-    if(owner!==email) batch.update(authRef,{authorizedEmails:[...new Set([owner,...auths])],updatedAt:new Date().toISOString()});
-    await batch.commit();
+    const reqRef=doc(cloudDb,"ownershipTransfers",email);
+    // Rejection only closes the pending request. It must not modify
+    // the authorization document because ownership never changed.
+    await updateDoc(reqRef,{status:"rejected",updatedAt:new Date().toISOString()});
     pendingOwnershipTransfer=null;
     closeOwnershipTransferNotice();
     setCloudMessage("Ownership transfer request rejected.");
@@ -3151,7 +3129,7 @@ window.acceptOwnershipTransfer=async function(){
   if(acceptBtn)acceptBtn.disabled=true;if(rejectBtn)rejectBtn.disabled=true;
   try{
     const authRef=doc(cloudDb,"appConfig","authorization");
-    const reqRef=doc(cloudDb,"appConfig","ownershipTransfers",email);
+    const reqRef=doc(cloudDb,"ownershipTransfers",email);
     const snap=await getDoc(authRef);
     if(!snap.exists())throw new Error("Authorization settings were not found.");
     const oldCfg=snap.data()||{};
@@ -3201,7 +3179,7 @@ function watchOwnershipTransferForUser(user){
   if(!user || !cloudDb)return;
   const email=normalizeEmail(user.email);
   if(!email)return;
-  const ref=doc(cloudDb,"appConfig","ownershipTransfers",email);
+  const ref=doc(cloudDb,"ownershipTransfers",email);
   ownershipTransferUnsubscribe=onSnapshot(ref,(snap)=>{
     if(!snap.exists()){pendingOwnershipTransfer=null;closeOwnershipTransferNotice();return;}
     const d=snap.data()||{};
