@@ -1656,6 +1656,17 @@ function updateReferencePreview(){
   if(box) box.textContent="Next "+subject+": "+nextReference(subject);
 }
 function currentDocumentData(){
+  // IMPORTANT: a saved document owns its original profile/signature/stamp snapshot.
+  // Never rebuild that snapshot from current Settings while editing an existing file.
+  let documentProfile=activeDocumentProfileSnapshot;
+  if(currentEditingDocumentId){
+    try{
+      const existing=getSavedDocuments().find(x=>String(x.id)===String(currentEditingDocumentId));
+      if(existing?.savedProfile) documentProfile=existing.savedProfile;
+    }catch(e){}
+  }
+  if(!documentProfile) documentProfile=getProfileSettings();
+  activeDocumentProfileSnapshot=JSON.parse(JSON.stringify(documentProfile));
   return {
     id:Date.now().toString()+"_"+Math.random().toString(36).slice(2,8),
     ref:clean(document.getElementById("ref").value),
@@ -1676,8 +1687,9 @@ function currentDocumentData(){
       rows:getPaymentData()
     },
     terms:getTermData(),
-    // Freeze the profile/signature/stamp used when this document is saved.
-    savedProfile:JSON.parse(JSON.stringify(activeDocumentProfileSnapshot || getProfileSettings())),
+    // Permanent per-document snapshot. This remains unchanged when Settings/profile
+    // are changed later and is restored whenever this document is opened.
+    savedProfile:JSON.parse(JSON.stringify(documentProfile)),
     savedAt:new Date().toISOString()
   };
 }
@@ -2304,25 +2316,26 @@ async function generatePDF(openPdf=false, printOnly=false){
     // When Signature is ON, leave this footer completely untouched so it stays
     // exactly like Version 47. When Signature is OFF, hide ONLY the signature
     // artwork area; the stamp and the complete name/designation/phone block stay.
+    // IMPORTANT: the footer is rendered ONLY from this document's frozen
+    // profile snapshot. Never read profile fields/signature/stamp from current
+    // Settings here; otherwise opening an old document after changing the profile
+    // would silently change its signature/profile.
+    white(page,25,600,550,225);
+
+    const footerName=clean(profile.name)||"TALHA KHAN";
+    const footerDesignation=clean(profile.designation)||"SALE & MARKETING OFFICER (PAVERS)";
+    const footerPhone=clean(profile.phone)||"0308-0620710";
+    const footerCompany=clean(profile.companyLine)||"For IZHAR PAVERS (PVT) LIMITED";
+
+    drawText(page,times,"Yours Truly,",72,652,11.5);
+    drawText(page,timesB,footerCompany,72,670,11.5,{maxWidth:320});
+
     if(profile.computerGeneratedEnabled){
-      // Signature OFF: clear the COMPLETE original footer area first.
-      // This removes every part of the template signature/artwork, including
-      // the old signature stroke that can otherwise remain behind the clean footer.
-      white(page,25,600,550,225);
+      // Signature OFF: show the computer-generated statement and no signature.
+      drawText(page,timesI,footerName,72,710,15.5,{maxWidth:220});
+      drawText(page,timesI,footerDesignation,72,735,10.5,{maxWidth:320});
+      drawText(page,times,footerPhone,72,758,10.5,{maxWidth:150});
 
-      const offName=clean(document.getElementById("profileName")?.value)||"TALHA KHAN";
-      const offDesignation=clean(document.getElementById("profileDesignation")?.value)||"SALE & MARKETING OFFICER (PAVERS)";
-      const offPhone=clean(document.getElementById("profilePhone")?.value)||"0308-0620710";
-      const offCompany=clean(document.getElementById("profileCompanyLine")?.value)||"For IZHAR PAVERS (PVT) LIMITED";
-
-      // Clean OFF footer: no signature artwork and no duplicate template text.
-      drawText(page,times,"Yours Truly,",72,652,11.5);
-      drawText(page,timesB,offCompany,72,670,11.5,{maxWidth:320});
-      drawText(page,timesI,offName,72,710,15.5,{maxWidth:220});
-      drawText(page,timesI,offDesignation,72,735,10.5,{maxWidth:320});
-      drawText(page,times,offPhone,72,758,10.5,{maxWidth:150});
-
-      // Stamp remains visible and complete when Signature is OFF.
       try{
         const stampData=profile.stampData||DEFAULT_STAMP_DATA;
         const stampB64=String(stampData).split(',')[1]||'';
@@ -2331,15 +2344,47 @@ async function generatePDF(openPdf=false, printOnly=false){
         page.drawImage(stampImg,{x:430,y:pageH-(674+92),width:92,height:92});
       }catch(e){}
 
-      // Keep the computer-generated statement as the only footer note.
-      // The old Karachi/Islamabad city line is intentionally removed from the OFF footer.
       const refNow=clean(document.getElementById("ref").value);
       const finalNote="This is a computer-generated document issued under Ref#"+(refNow?" "+refNow:"")+" and does not require a signature.";
       drawText(page,timesB,finalNote,72,792,8.2,{maxWidth:450});
-      // Clean the small stray/dot artifacts that can remain underneath the city line
-      // in the original footer template, then redraw the city line cleanly.
       white(page,300,821,250,18);
       drawText(page,timesB,"Karachi, Islamabad, Faisalabad, Jauharabad, Hatar",350,815,8.5,{maxWidth:200});
+    }else{
+      // Signature ON: draw the exact signature image saved with this document.
+      // This makes uploaded/replaced signatures document-specific.
+      let signatureDrawn=false;
+      try{
+        const signatureData=await cropTransparentImageData(await cleanSignatureImageData(profile.signatureData||DEFAULT_SIGNATURE_DATA));
+        const sigB64=String(signatureData).split(',')[1]||'';
+        if(sigB64){
+          const sigBytes=Uint8Array.from(atob(sigB64),c=>c.charCodeAt(0));
+          const sigImg=await pdf.embedPng(sigBytes);
+          const iw=sigImg.width||300, ih=sigImg.height||100;
+          const maxW=190, maxH=48;
+          const ratio=Math.min(maxW/iw,maxH/ih);
+          const sw=Math.max(1,iw*ratio), sh=Math.max(1,ih*ratio);
+          page.drawImage(sigImg,{x:72,y:pageH-(700+sh),width:sw,height:sh});
+          signatureDrawn=true;
+        }
+      }catch(e){ console.warn("Document signature render failed:",e); }
+
+      // Keep the name/designation/phone tied to the same frozen profile.
+      drawText(page,timesI,footerName,72,710,15.5,{maxWidth:220});
+      drawText(page,timesI,footerDesignation,72,735,10.5,{maxWidth:320});
+      drawText(page,times,footerPhone,72,758,10.5,{maxWidth:150});
+
+      // The stamp is also frozen with the document.
+      try{
+        const stampData=profile.stampData||DEFAULT_STAMP_DATA;
+        const stampB64=String(stampData).split(',')[1]||'';
+        const stampBytes=Uint8Array.from(atob(stampB64),c=>c.charCodeAt(0));
+        const stampImg=await pdf.embedPng(stampBytes);
+        page.drawImage(stampImg,{x:430,y:pageH-(674+92),width:92,height:92});
+      }catch(e){}
+
+      // If an invalid signature image is supplied, do not substitute a newer
+      // Settings signature. The rest of the original document profile remains fixed.
+      if(!signatureDrawn) console.warn("Saved document has no usable signature image.");
     }
 
     const out=await pdf.save();
