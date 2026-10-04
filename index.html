@@ -1720,6 +1720,10 @@ function currentDocumentData(){
     // Permanent per-document snapshot. This remains unchanged when Settings/profile
     // are changed later and is restored whenever this document is opened.
     savedProfile:JSON.parse(JSON.stringify(documentProfile)),
+    // Saved documents are always active records. Keep these explicit flags so
+    // they cannot accidentally be treated as deleted/uncategorized.
+    isDeleted:false,
+    folder:(document.getElementById("subject").value||"QUOTATION").toUpperCase(),
     // createdAt is immutable: opening, editing, printing or downloading a file
     // must never move it to the top of the Documents folder.
     createdAt:existingDocument?.createdAt || existingDocument?.savedAt || new Date().toISOString(),
@@ -2443,10 +2447,12 @@ async function generatePDF(openPdf=false, printOnly=false, persist=true){
       const maxStampW=92, maxStampH=92;
       const stampRatio=Math.min(maxStampW/iw,maxStampH/ih);
       const stampW=Math.max(1,iw*stampRatio), stampH=Math.max(1,ih*stampRatio);
-      const stampTop=Math.max(companyTop,currentTop-2);
+      // Keep the stamp safely above the bottom office/location line.
+      // pdf-lib uses bottom-origin Y coordinates, so 185 places the stamp
+      // clearly above the footer location text (Faisalabad, Jauharabad, etc.).
       page.drawImage(stampImg,{
         x:footerRightX,
-        y:yTop(pageH,stampTop,stampH),
+        y:185,
         width:stampW,
         height:stampH,
         opacity:0.85
