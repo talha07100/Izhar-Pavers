@@ -3103,24 +3103,41 @@ window.acceptPendingOwnershipTransfer=async function(){
   const pending=authorizationConfig.pendingOwnershipTransfer;
   const email=normalizeEmail(cloudUser.email);
   if(!pending || pending.status!=="pending" || normalizeEmail(pending.email)!==email){ alert("There is no pending ownership transfer for this Gmail account."); return; }
-  const oldOwner=getCurrentOwnerEmail();
+  const oldOwner=normalizeEmail(getCurrentOwnerEmail());
   if(!oldOwner || oldOwner===email){ alert("This account is already the Owner."); return; }
-  if(!confirm("Accept ownership of Izhar Pavers for "+email+"?\n\nYou will become the Owner. The previous Owner will be removed from Admin access.")) return;
-  const requestRef=doc(cloudDb,"ownershipRequests",email);
+  if(!confirm("Accept ownership of Izhar Pavers for "+email+"?\n\nYou will become the Owner. The previous Owner will be removed from Admin and authorized access.")) return;
+
+  // IMPORTANT: Do the transfer in ONE Firestore write.
+  // The old version first tried to create ownershipRequests/{email}, but
+  // that document did not exist and the security rules did not allow the
+  // new Owner to create it. That caused the 10-second timeout.
   const authRef=doc(cloudDb,"appConfig","authorization");
-  const acceptedRequest={oldOwnerEmail:oldOwner,newOwnerEmail:email,status:"accepted",acceptedAt:new Date().toISOString()};
-  const nextAuthorized=[...new Set((authorizationConfig.authorizedEmails||[]).map(normalizeEmail).filter(e=>e && e!==oldOwner && e!==email))];
+  const nextAuthorized=[...new Set((authorizationConfig.authorizedEmails||[])
+    .map(normalizeEmail)
+    .filter(e=>e && e!==oldOwner && e!==email))];
   nextAuthorized.push(email);
-  const nextConfig={ownerEmail:email,enabled:!!authorizationConfig.enabled,authorizedEmails:nextAuthorized,adminEmails:[email],pendingOwnershipTransfer:null,updatedAt:new Date().toISOString(),previousOwnerEmail:oldOwner};
+  const nextConfig={
+    ownerEmail:email,
+    enabled:!!authorizationConfig.enabled,
+    authorizedEmails:nextAuthorized,
+    adminEmails:[email],
+    pendingOwnershipTransfer:null,
+    updatedAt:new Date().toISOString()
+  };
+
   try{
-    await withTimeout(setDoc(requestRef,acceptedRequest,{merge:true}),10000,"Ownership acceptance save");
     await withTimeout(setDoc(authRef,nextConfig,{merge:true}),20000,"Ownership transfer");
     authorizationConfig=nextConfig;
     localStorage.setItem("izhar_pavers_authorization_config_v1",JSON.stringify(nextConfig));
-    mirrorAuthorizationLocalStorage(); renderAuthorizationUI();
+    mirrorAuthorizationLocalStorage();
+    renderAuthorizationUI();
     setCloudMessage("Ownership transferred successfully. The previous Owner was removed from Admin access.");
-    alert("Ownership transferred successfully.\n\n"+email+" is now the Owner.\nThe previous Owner has been removed from Admin access.");
-  }catch(e){ console.error("Ownership acceptance/transfer failed:",e); alert("Ownership transfer failed: "+(e?.message||e)); }
+    alert("Ownership transferred successfully.\n\n"+email+" is now the Owner.\nThe previous Owner has been removed from Admin and authorized access.");
+  }catch(e){
+    console.error("Ownership transfer failed:",e);
+    const msg=String(e?.message||e||"Unknown error");
+    alert("Ownership transfer failed:\n\n"+msg);
+  }
 };
 
 window.refreshAuthorizationSettings=async function(){
