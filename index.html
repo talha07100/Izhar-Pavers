@@ -3133,8 +3133,13 @@ window.acceptOwnershipTransfer=async function(){
     const snap=await getDoc(authRef);
     if(!snap.exists())throw new Error("Authorization settings were not found.");
     const oldCfg=snap.data()||{};
-    if(normalizeEmail(oldCfg.ownerEmail)!==normalizeEmail(data.fromOwnerEmail) || String(oldCfg.ownerUid||"")!==String(data.fromOwnerUid||"")){
+    if(normalizeEmail(oldCfg.ownerEmail)!==normalizeEmail(data.fromOwnerEmail)){
       throw new Error("This transfer request is no longer valid because the current Owner has changed.");
+    }
+    // The transfer request was created by the authenticated current Owner.
+    // Do not block a legitimate transfer merely because an older ownerUid is stale.
+    if(oldCfg.ownerUid && String(oldCfg.ownerUid)!==String(data.fromOwnerUid)){
+      console.warn("Owner UID differs from the historical transfer request; proceeding because the current Owner email matches the request.");
     }
     const oldOwner=normalizeEmail(oldCfg.ownerEmail);
     const oldAdmins=(Array.isArray(oldCfg.adminEmails)?oldCfg.adminEmails:[]).map(normalizeEmail).filter(Boolean);
