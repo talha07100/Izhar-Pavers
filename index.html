@@ -511,15 +511,14 @@ body:has(.documents-portal.open) .saved-card{display:none}
 <button class="btn secondary" id="addAdminBtn" onclick="addAdmin()" type="button">+ Add Admin</button>
 </div>
 <div class="auth-note" style="margin-top:8px">An Admin added here is automatically authorized to use the app.</div>
-<div class="auth-note" style="margin-top:18px;font-weight:800">Transfer Ownership — Safe Verification</div>
-<div class="auth-note" style="margin-top:6px">Ownership is <strong>not transferred immediately</strong>. Enter the new Owner Gmail twice. A pending transfer is created first. The new Gmail must sign in with Google and explicitly accept the transfer. Until acceptance, the current Owner stays Owner and can cancel the request.</div>
+<div class="auth-note" style="margin-top:18px;font-weight:800">👑 Change Owner — Simple & Safe</div>
+<div class="auth-note" style="margin-top:6px">Sirf <strong>new Owner ka Gmail</strong> likhein. Ownership foran change nahi hogi. New Gmail se Google sign-in karke <strong>Accept Ownership</strong> karna hoga. Tab tak aap Owner rahenge aur request cancel kar sakte hain.</div>
 <div class="ownership-row" style="margin-top:8px;display:flex;flex-direction:column;gap:8px">
-<input id="newOwnerEmailInput" placeholder="Enter new Owner Gmail address" type="email"/>
-<input id="confirmNewOwnerEmailInput" placeholder="Confirm new Owner Gmail address" type="email"/>
-<button class="btn primary" id="transferOwnershipBtn" onclick="transferAdminOwnership()" type="button">Create Pending Transfer</button>
+<input id="newOwnerEmailInput" placeholder="New Owner Gmail (example@gmail.com)" type="email"/>
+<button class="btn primary" id="transferOwnershipBtn" onclick="transferAdminOwnership()" type="button">Send Ownership Request</button>
 </div>
 <div id="pendingOwnershipTransfer" class="auth-note" style="margin-top:10px;display:none"></div>
-<div class="auth-note" style="margin-top:8px">The old Owner is never signed out or removed until the new Owner accepts. A wrong Gmail can therefore be cancelled safely.</div>
+<div class="auth-note" style="margin-top:8px">⚠️ Wrong Gmail? No problem — ownership does not change. Cancel the pending request and enter the correct Gmail.</div>
 </div>
 <div class="card" id="referenceSettingsCard">
 <h3 style="margin-top:0">Reference &amp; Serial Number Settings</h3>
@@ -3059,35 +3058,32 @@ function maybeShowPendingOwnershipAcceptance(){
 }
 
 window.transferAdminOwnership=async function(){
-  if(!isOwnerAccount()){ alert("Only the current Owner can start an ownership transfer."); return; }
+  if(!isOwnerAccount()){ alert("Only the current Owner can change ownership."); return; }
   const input=document.getElementById("newOwnerEmailInput");
-  const confirmInput=document.getElementById("confirmNewOwnerEmailInput");
   const newOwner=normalizeEmail(input?.value);
-  const confirmed=normalizeEmail(confirmInput?.value);
   const oldOwner=getCurrentOwnerEmail();
   if(!newOwner){ alert("Please enter the new Owner Gmail address."); return; }
-  if(!/^[-a-z0-9._%+]+@gmail\.com$/i.test(newOwner)){ alert("Please enter a valid Gmail address (example@gmail.com)."); return; }
-  if(newOwner!==confirmed){ alert("The two Gmail addresses do not match. Please enter the same Gmail in both boxes."); return; }
+  if(!/^[-a-z0-9._%+]+@gmail\.com$/i.test(newOwner)){ alert("Please enter a valid Gmail address, for example: example@gmail.com"); return; }
   if(newOwner===oldOwner){ alert("This account is already the current Owner."); return; }
-  if(!cloudDb || !cloudUser){ alert("Firebase/Google connection is not ready. Please sign in with the current Owner Gmail and wait until Cloud sync is active."); return; }
-  if(!authorizationChecked){ alert("Authorization is still loading from Firebase. Please wait a few seconds and try again."); return; }
+  if(!cloudDb || !cloudUser){ alert("Google/Firebase is not ready. Please wait until Cloud sync is active and try again."); return; }
+  if(!authorizationChecked){ alert("Authorization is still loading. Please wait a moment and try again."); return; }
   if(authorizationConfig.pendingOwnershipTransfer?.status==="pending"){ alert("A transfer is already pending. Cancel it first before creating another one."); return; }
-  if(!confirm("Create a pending ownership transfer to "+newOwner+"?\n\nOwnership will NOT change now. The new Gmail must sign in with Google and press Accept Ownership. Until then, you remain the Owner and can cancel the request.")) return;
   const pendingTransfer={email:newOwner,status:"pending",requestedBy:oldOwner,requestedAt:new Date().toISOString()};
   const nextConfig={...authorizationConfig,ownerEmail:oldOwner,pendingOwnershipTransfer:pendingTransfer,updatedAt:new Date().toISOString()};
   try{
-    await withTimeout(getDoc(doc(cloudDb,"appConfig","authorization")),8000,"Firebase/Firestore connection check");
-    await withTimeout(setDoc(doc(cloudDb,"appConfig","authorization"),nextConfig,{merge:true}),10000,"Ownership transfer save");
+    // Save only after a simple confirmation. The Owner remains Owner until acceptance.
+    if(!confirm("Send ownership request to\n\n"+newOwner+"?\n\nOwnership will NOT change now. The new Gmail must sign in with Google and press Accept Ownership.")) return;
+    await withTimeout(setDoc(doc(cloudDb,"appConfig","authorization"),nextConfig,{merge:true}),10000,"Ownership request save");
     authorizationConfig=nextConfig;
     localStorage.setItem("izhar_pavers_authorization_config_v1",JSON.stringify(nextConfig));
     mirrorAuthorizationLocalStorage();
-    if(input) input.value=""; if(confirmInput) confirmInput.value="";
+    if(input) input.value="";
     renderAuthorizationUI();
-    alert("Transfer request created. The new Gmail must sign in with Google and accept ownership. Your current ownership is unchanged.");
+    alert("Ownership request sent successfully.\n\nThe new Gmail must sign in with Google and accept it. You remain the Owner until then.");
   }catch(e){
-    console.error("Ownership transfer failed:",e);
+    console.error("Ownership request failed:",e);
     const msg=String(e?.message||e||"Unknown error");
-    alert("Transfer request failed.\n\n"+msg+"\n\nIf this says permission-denied, deploy the included firestore.rules to the same Firebase project. If it says timed out/offline, check the Firebase project/config or internet connection.");
+    alert("Ownership request could not be saved.\n\n"+msg+"\n\nNo ownership was changed.");
   }
 };
 
