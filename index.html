@@ -2418,7 +2418,9 @@ async function generatePDF(openPdf=false, printOnly=false, persist=true){
     // are on the same visual level; all text is given enough clearance so that
     // nothing can overlap or be clipped.
     const footerX=72;
-    const footerTopAnchor=655;
+    // No-sign footer is intentionally lower and compact: "Yours Truly" and
+    // the company line sit just above Talha Khan instead of leaving a large gap.
+    const footerTopAnchor=footerSignOff ? 685 : 655;
     const companyTop=footerTopAnchor+18;
     const companySize=11.5;
     const companyMaxWidth=300;
@@ -2434,15 +2436,23 @@ async function generatePDF(openPdf=false, printOnly=false, persist=true){
       });
     });
 
-    // Reserve ONE identical signature slot in both modes.  This is important:
-    // turning the signature off must not move the name/stamp/footer upward.
-    // Only the signature ink disappears; the rest of the footer stays in exactly
-    // the same vertical position.
-    let currentTop=companyTop+companyH+8;
-    const signatureSlotTop=currentTop;
+    // Footer flow is different when the handwritten signature is OFF.
+    // In no-sign mode, keep "Yours Truly" + company line close above the
+    // printed name, with only a small natural gap.  This removes the old
+    // empty signature slot that was creating a large blank space.
+    let currentTop;
+    let signatureSlotTop;
     const reservedSignatureH=40;
     let signatureDrawn=false;
     let signatureW=0, signatureH=reservedSignatureH;
+
+    if(footerSignOff){
+      currentTop=companyTop+companyH+6;
+      signatureSlotTop=currentTop;
+    }else{
+      currentTop=companyTop+companyH+8;
+      signatureSlotTop=currentTop;
+    }
 
     if(!footerSignOff){
       try{
@@ -2469,8 +2479,13 @@ async function generatePDF(openPdf=false, printOnly=false, persist=true){
       }
     }
 
-    // Always advance by the same reserved slot, whether the signature is ON or OFF.
-    currentTop=signatureSlotTop+reservedSignatureH+7;
+    // When signature is OFF there is no reason to reserve a 40pt blank
+    // signature area.  Put the name just below the company line.  When the
+    // signature is ON, retain the existing reserved slot so signed documents
+    // keep their established layout.
+    currentTop=footerSignOff
+      ? signatureSlotTop+7
+      : signatureSlotTop+reservedSignatureH+7;
 
     const nameTop=currentTop;
     const designationTop=nameTop+17;
@@ -2482,29 +2497,31 @@ async function generatePDF(openPdf=false, printOnly=false, persist=true){
     // Keep the stamp beside the signature/name block, not underneath it.
     // Its right edge stays comfortably inside the page and away from text.
     const officeLine="Karachi, Islamabad, Faisalabad, Jauharabad, Hatar";
-    const officeTop=805;
+    // Keep the office locations fully visible and safely inside the page.
+    // In no-sign mode the footer above is compact, so the line can sit slightly
+    // higher instead of being pushed into the viewer's bottom toolbar area.
+    const officeTop=footerSignOff ? 795 : 805;
     try{
       const stampData=profile.stampData||DEFAULT_STAMP_DATA;
       const stampB64=String(stampData).split(',')[1]||'';
       const stampBytes=Uint8Array.from(atob(stampB64),c=>c.charCodeAt(0));
       const stampImg=await pdf.embedPng(stampBytes);
       const iw=stampImg.width||100, ih=stampImg.height||100;
-      const maxStampW=72, maxStampH=60;
+      const maxStampW=52, maxStampH=footerSignOff ? 52 : 60;
       const stampRatio=Math.min(maxStampW/iw,maxStampH/ih);
       const stampW=Math.max(1,iw*stampRatio), stampH=Math.max(1,ih*stampRatio);
 
-      // Place stamp at the same vertical level as the handwritten signature.
-      // If the signature area becomes taller, move the stamp down just enough
-      // to remain aligned without entering the office line.
-      // Keep the stamp in its own clear zone. When there is no handwritten
-      // signature, align it beside the name block and reserve enough vertical
-      // space below it so the computer-generated note can never be crossed.
-      // The stamp occupies the same slot in both signature modes, beside the
-      // signature area.  It never moves down onto the name/designation/note.
-      const stampTop=signatureSlotTop-2;
+      // No-sign mode: place the stamp beside the printed name block, as a
+      // separate clean area.  It must never sit on top of the name, note or
+      // office line.  Signed mode keeps the previous signature-side position.
+      const stampTop=footerSignOff ? companyTop+7 : signatureSlotTop-2;
+      // In no-sign mode, calculate the stamp position from the actual
+      // company-line width so it sits immediately after the full
+      // "For IZHAR PAVERS (PVT) LIMITED" text instead of leaving a large gap.
+      const companyTextWidth = timesB.widthOfTextAtSize(footerCompany, companySize);
+      const noSignStampX = Math.min(footerX + companyTextWidth + 7, 500 - stampW);
       page.drawImage(stampImg,{
-        // Close to the signature while leaving a small clean gap.
-        x:205,
+        x:footerSignOff ? noSignStampX : 205,
         y:yTop(pageH,stampTop,stampH),
         width:stampW,
         height:stampH,
