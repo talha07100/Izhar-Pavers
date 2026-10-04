@@ -20,9 +20,14 @@ service cloud.firestore {
       return signedIn()
         && exists(/databases/$(database)/documents/appConfig/authorization)
         && (
-          ('ownerUid' in authDoc().data && authDoc().data.ownerUid != null && request.auth.uid == authDoc().data.ownerUid)
+          ('ownerUid' in authDoc().data
+            && authDoc().data.ownerUid != null
+            && authDoc().data.ownerUid != ''
+            && request.auth.uid == authDoc().data.ownerUid)
           ||
-          ((!('ownerUid' in authDoc().data) || authDoc().data.ownerUid == null || authDoc().data.ownerUid == '')
+          ((!('ownerUid' in authDoc().data)
+            || authDoc().data.ownerUid == null
+            || authDoc().data.ownerUid == '')
             && request.auth.token.email == authDoc().data.ownerEmail)
         );
     }
@@ -36,56 +41,103 @@ service cloud.firestore {
 
     function validAdminList(data) {
       return 'ownerEmail' in data
+        && 'ownerUid' in data
+        && data.ownerUid != null
+        && data.ownerUid != ''
         && 'adminEmails' in data
         && data.adminEmails.size() >= 1
         && data.adminEmails.size() <= 4
-        && data.adminEmails.hasAll([data.ownerEmail]);
+        && data.adminEmails.hasAll([data.ownerEmail])
+        && 'authorizedEmails' in data
+        && data.authorizedEmails.hasAll([data.ownerEmail]);
     }
 
     match /appConfig/authorization {
       allow read: if signedIn();
 
-      // Permanent bootstrap recovery. Once ownerUid exists, normal Owner control
-      // is bound to the authenticated Firebase UID instead of a typed email.
+      // First-time bootstrap only.
       allow create: if bootstrapOwner()
         && request.resource.data.ownerEmail == 'talhakhan14746@gmail.com'
+        && request.resource.data.ownerUid == request.auth.uid
         && validAdminList(request.resource.data);
 
+      // Bootstrap account may establish/recover its own UID only while it is
+      // still the configured bootstrap owner.
       allow update: if bootstrapOwner()
+        && resource.data.ownerEmail == 'talhakhan14746@gmail.com'
         && request.resource.data.ownerEmail == 'talhakhan14746@gmail.com'
-        && validAdminList(request.resource.data)
-        && (
-          !('ownerUid' in resource.data)
-          || resource.data.ownerUid == null
-          || resource.data.ownerUid == ''
-          || request.resource.data.ownerUid == request.auth.uid
-        );
+        && request.resource.data.ownerUid == request.auth.uid
+        && validAdminList(request.resource.data);
 
-      // Existing Owner/Admin accounts may update authorization/admin data.
-      // Only the current Owner may change ownerEmail/ownerUid, and the new
-      // owner must be explicitly present in both Admin and Authorized lists.
+      // Normal Owner/Admin changes that do not change ownership.
       allow update: if currentAdmin()
         && validAdminList(request.resource.data)
+        && request.resource.data.ownerEmail == resource.data.ownerEmail
+        && request.resource.data.ownerUid == resource.data.ownerUid;
+
+      // NEW OWNER ACCEPTANCE: the target account can become Owner only when
+      // an existing Owner-created transfer request is accepted in the same
+      // atomic batch. The previous Owner must be removed from Admin/Authorized.
+      allow update: if signedIn()
+        && exists(/databases/$(database)/documents/appConfig/ownershipTransfers/$(request.auth.uid))
+        && getAfter(/databases/$(database)/documents/appConfig/ownershipTransfers/$(request.auth.uid)).data.status == 'accepted'
+        && getAfter(/databases/$(database)/documents/appConfig/ownershipTransfers/$(request.auth.uid)).data.toOwnerUid == request.auth.uid
+        && getAfter(/databases/$(database)/documents/appConfig/ownershipTransfers/$(request.auth.uid)).data.toOwnerEmail == request.auth.token.email
+        && getAfter(/databases/$(database)/documents/appConfig/ownershipTransfers/$(request.auth.uid)).data.fromOwnerUid == resource.data.ownerUid
+        && getAfter(/databases/$(database)/documents/appConfig/ownershipTransfers/$(request.auth.uid)).data.fromOwnerEmail == resource.data.ownerEmail
+        && request.resource.data.ownerUid == request.auth.uid
+        && request.resource.data.ownerEmail == request.auth.token.email
+        && request.resource.data.ownerUid != resource.data.ownerUid
+        && request.resource.data.adminEmails.hasAll([request.auth.token.email])
+        && request.resource.data.authorizedEmails.hasAll([request.auth.token.email])
+        && !request.resource.data.adminEmails.hasAny([resource.data.ownerEmail])
+        && !request.resource.data.authorizedEmails.hasAny([resource.data.ownerEmail])
+        && validAdminList(request.resource.data);
+
+      // NEW OWNER REJECTION: target may reject the pending request and remove
+      // itself from Authorized, while the existing Owner remains unchanged.
+      allow update: if signedIn()
+        && exists(/databases/$(database)/documents/appConfig/ownershipTransfers/$(request.auth.uid))
+        && getAfter(/databases/$(database)/documents/appConfig/ownershipTransfers/$(request.auth.uid)).data.status == 'rejected'
+        && getAfter(/databases/$(database)/documents/appConfig/ownershipTransfers/$(request.auth.uid)).data.toOwnerUid == request.auth.uid
+        && getAfter(/databases/$(database)/documents/appConfig/ownershipTransfers/$(request.auth.uid)).data.fromOwnerUid == resource.data.ownerUid
+        && request.resource.data.ownerUid == resource.data.ownerUid
+        && request.resource.data.ownerEmail == resource.data.ownerEmail
+        && !request.resource.data.authorizedEmails.hasAny([request.auth.token.email])
+        && request.resource.data.adminEmails == resource.data.adminEmails
+        && request.resource.data.adminEmails.hasAll([resource.data.ownerEmail])
+        && validAdminList(request.resource.data);
+
+      allow delete: if false;
+    }
+
+    match /appConfig/ownershipTransfers/{targetUid} {
+      // Current Owner creates a request for the exact verified target UID.
+      allow create: if currentOwner()
+        && targetUid == request.resource.data.toOwnerUid
+        && request.resource.data.status == 'pending'
+        && request.resource.data.fromOwnerUid == request.auth.uid
+        && request.resource.data.fromOwnerEmail == request.auth.token.email
+        && request.resource.data.toOwnerEmail != request.auth.token.email
+        && request.resource.data.toOwnerEmail.matches('^[A-Za-z0-9._%+-]+@gmail\\.com$');
+
+      allow read: if signedIn()
         && (
-          (
-            request.resource.data.ownerEmail == resource.data.ownerEmail
-            && request.resource.data.ownerUid == resource.data.ownerUid
-            && (
-              currentOwner()
-              || request.resource.data.adminEmails == resource.data.adminEmails
-            )
-          )
-          ||
-          (
-            currentOwner()
-            && request.resource.data.ownerEmail != resource.data.ownerEmail
-            && 'ownerUid' in request.resource.data
-            && request.resource.data.ownerUid != null
-            && request.resource.data.ownerUid != ''
-            && request.resource.data.ownerEmail in request.resource.data.adminEmails
-            && request.resource.data.ownerEmail in request.resource.data.authorizedEmails
-          )
+          request.auth.uid == targetUid
+          || request.auth.uid == resource.data.fromOwnerUid
         );
+
+      // Target can accept or reject its own request. The authorization write
+      // is separately protected by getAfter() above.
+      allow update: if signedIn()
+        && request.auth.uid == targetUid
+        && resource.data.toOwnerUid == request.auth.uid
+        && resource.data.status == 'pending'
+        && request.resource.data.toOwnerUid == resource.data.toOwnerUid
+        && request.resource.data.fromOwnerUid == resource.data.fromOwnerUid
+        && request.resource.data.toOwnerEmail == resource.data.toOwnerEmail
+        && request.resource.data.fromOwnerEmail == resource.data.fromOwnerEmail
+        && request.resource.data.status in ['accepted', 'rejected'];
 
       allow delete: if false;
     }
