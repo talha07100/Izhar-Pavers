@@ -512,7 +512,7 @@ body:has(.documents-portal.open) .saved-card{display:none}
 </div>
 <div class="auth-note" style="margin-top:8px">An Admin added here is automatically authorized to use the app.</div>
 <div class="auth-note" style="margin-top:18px;font-weight:800">Transfer Ownership</div>
-<div class="auth-note" style="margin-top:6px">Enter the Gmail account that should become the new Owner. The selected Gmail must be verified by Google before it can become Owner. The current Owner must also re-verify before the transfer is allowed.</div>
+<div class="auth-note" style="margin-top:6px">Enter the Gmail account that should become the new Owner. An ownership request will be sent to that Gmail. Ownership changes only after that account signs in and accepts the request.</div>
 <div class="ownership-row" style="margin-top:8px;display:flex;flex-direction:column;gap:8px">
 <input id="newOwnerEmailInput" placeholder="Enter new Owner Gmail address" type="email"/>
 <button class="btn primary" id="transferOwnershipBtn" onclick="transferAdminOwnership()" type="button">Transfer Ownership</button>
