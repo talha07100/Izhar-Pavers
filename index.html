@@ -2691,7 +2691,7 @@ renderSavedDocuments();
 
 </script>
 <script type="module">
-import { initializeApp, getApps, deleteApp } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-app.js";
+import { initializeApp, getApps } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-app.js";
 import { getAuth, GoogleAuthProvider, signInWithPopup, reauthenticateWithPopup, onAuthStateChanged, signOut, setPersistence, browserLocalPersistence } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js";
 import { getFirestore, doc, getDoc, setDoc, updateDoc, onSnapshot, writeBatch } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js";
 
@@ -3066,23 +3066,43 @@ window.transferAdminOwnership=async function(){
       throw new Error("Current Owner verification did not match the signed-in Owner account.");
     }
 
-    // Verify that the target Gmail is a real Google/Firebase account and capture its UID.
+    // Verify the target Gmail in an isolated Firebase Auth app.
+    // IMPORTANT: keep this secondary app alive until ALL Auth operations have
+    // completely finished. Deleting the app while the popup/auth callback is
+    // still resolving can produce: "Cannot read properties of undefined
+    // (reading 'app')" on mobile browsers.
     setCloudMessage("Security check: please select the NEW Owner Google account ("+newOwner+")…");
     const cfg=getFirebaseConfig();
-    const verifyApp=initializeApp(cfg,"ownership-verification-"+Date.now());
-    const verifyAuth=getAuth(verifyApp);
-    const targetProvider=new GoogleAuthProvider();
-    targetProvider.setCustomParameters({prompt:"select_account",login_hint:newOwner});
+    if(!cfg || !cfg.apiKey || !cfg.projectId) throw new Error("Firebase configuration is missing.");
+    const verifyName="ownership-verification";
+    let verifyApp=null;
+    let verifyAuth=null;
     let targetUser=null;
     try{
-      const targetCred=await withTimeout(signInWithPopup(verifyAuth,targetProvider),30000,"New Owner verification");
+      // Reuse an existing verification app if one exists; otherwise create it once.
+      try{ verifyApp=getApps().find(a=>a.name===verifyName) || initializeApp(cfg,verifyName); }
+      catch(initErr){
+        // If a stale app exists with the same name/config, get it again.
+        verifyApp=getApps().find(a=>a.name===verifyName);
+        if(!verifyApp) throw initErr;
+      }
+      verifyAuth=getAuth(verifyApp);
+      const targetProvider=new GoogleAuthProvider();
+      targetProvider.setCustomParameters({prompt:"select_account",login_hint:newOwner});
+      const targetCred=await withTimeout(
+        signInWithPopup(verifyAuth,targetProvider),
+        30000,
+        "New Owner verification"
+      );
       targetUser=targetCred?.user||null;
       if(!targetUser || normalizeEmail(targetUser.email)!==newOwner){
         throw new Error("The Google account selected does not match "+newOwner+". No transfer request was created.");
       }
     }finally{
-      try{ await signOut(verifyAuth); }catch(e){}
-      try{ await deleteApp(verifyApp); }catch(e){}
+      // Sign out first, then leave the secondary app intact. It will be reused
+      // for the next transfer attempt; this avoids the mobile Firebase SDK
+      // "reading 'app'" race caused by deleting an active Auth app.
+      if(verifyAuth){ try{ await signOut(verifyAuth); }catch(e){} }
     }
 
     const now=new Date().toISOString();
