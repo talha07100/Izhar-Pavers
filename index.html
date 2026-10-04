@@ -273,15 +273,16 @@ body:has(.documents-portal.open) .saved-card{display:none}
   flex:1 1 auto !important;
   width:100% !important;
   min-width:0 !important;
-  min-height:200px !important;
-  height:auto !important;
+  min-height:52px !important;
+  height:52px !important;
   padding:12px !important;
   border:1px solid #cfd7e2 !important;
   border-radius:9px !important;
   background:#fff !important;
   font:inherit !important;
   line-height:1.5 !important;
-  resize:vertical !important;
+  resize:none !important;
+  overflow-y:hidden !important;
   box-sizing:border-box !important;
 }
 #termsList .actual-term-toolbar{
@@ -310,7 +311,8 @@ body:has(.documents-portal.open) .saved-card{display:none}
   #termsList .actual-term-editor-row{padding:10px !important}
   #termsList .actual-term-writing-row{gap:8px !important}
   #termsList .actual-term-textarea{
-    min-height:200px !important;
+    min-height:52px !important;
+    height:52px !important;
     font-size:16px !important;
     line-height:1.5 !important;
   }
@@ -1351,6 +1353,15 @@ function toggleTermsAuth(locked){
   localStorage.setItem("termsAuthLocked",locked?"true":"false");
   applyTermsAuthLock();
 }
+function autoResizeTermTextarea(textarea){
+  if(!textarea) return;
+  textarea.style.height="52px";
+  textarea.style.height=Math.max(52,textarea.scrollHeight)+"px";
+}
+function resizeAllTermTextareas(){
+  document.querySelectorAll("#termsList .actual-term-textarea").forEach(autoResizeTermTextarea);
+}
+
 function addTerm(value="", highlight=false, highlightColor="#fff3a3", bold=false, italic=false, fontSize=null){
   const box=document.getElementById("termsList");
   if(!box) return;
@@ -1376,7 +1387,8 @@ function addTerm(value="", highlight=false, highlightColor="#fff3a3", bold=false
   row.innerHTML=`
     <div class="actual-term-writing-row">
       <span class="actual-term-number">${[...document.querySelectorAll("#termsList .actual-term-editor-row")].length + 1}</span>
-      <textarea class="term-input actual-term-textarea" rows="8" placeholder="Term & Condition likhein...">${esc(value)}</textarea>
+      <textarea class="term-input actual-term-textarea" rows="1" placeholder="Term & Condition likhein..."
+        oninput="autoResizeTermTextarea(this)">${esc(value)}</textarea>
     </div>
 
     <div class="actual-term-toolbar">
@@ -1409,6 +1421,8 @@ function addTerm(value="", highlight=false, highlightColor="#fff3a3", bold=false
     </div>`;
 
   box.appendChild(row);
+  const newTextarea=row.querySelector(".actual-term-textarea");
+  autoResizeTermTextarea(newTextarea);
   refreshTermButtons();
 }
 
@@ -1425,6 +1439,7 @@ function changeTermRowFontSize(btn,delta){
   n=Math.min(16,Math.max(7,n+delta));
   row.dataset.fontSize=String(n);
   const label=row.querySelector(".term-size-label"); if(label) label.textContent=n+" pt";
+  autoResizeTermTextarea(row.querySelector(".actual-term-textarea"));
 }
 
 function toggleColorPalette(btn){
@@ -1524,6 +1539,17 @@ function normalizeDocumentIds(list){
     }
     used.add(id);
     if(copy.id!==id) copy.id=id;
+    // Keep a permanent creation timestamp for ordering. Older documents created
+    // by this app used a millisecond timestamp at the start of their id, so use
+    // that as the best available original creation time before falling back.
+    if(!copy.createdAt){
+      const idStamp=String(copy.id||"").match(/^(\\d{13})_/);
+      if(idStamp){
+        const d=new Date(Number(idStamp[1]));
+        if(!Number.isNaN(d.getTime())) copy.createdAt=d.toISOString();
+      }
+      if(!copy.createdAt) copy.createdAt=copy.savedAt||copy.date||new Date().toISOString();
+    }
     return copy;
   });
 }
@@ -1656,6 +1682,7 @@ function updateReferencePreview(){
   if(box) box.textContent="Next "+subject+": "+nextReference(subject);
 }
 function currentDocumentData(){
+  const existingDocument=currentEditingDocumentId ? getSavedDocuments().find(x=>String(x.id)===String(currentEditingDocumentId)) : null;
   // IMPORTANT: a saved document owns its original profile/signature/stamp snapshot.
   // Never rebuild that snapshot from current Settings while editing an existing file.
   let documentProfile=activeDocumentProfileSnapshot;
@@ -1690,7 +1717,10 @@ function currentDocumentData(){
     // Permanent per-document snapshot. This remains unchanged when Settings/profile
     // are changed later and is restored whenever this document is opened.
     savedProfile:JSON.parse(JSON.stringify(documentProfile)),
-    savedAt:new Date().toISOString()
+    // createdAt is immutable: opening, editing, printing or downloading a file
+    // must never move it to the top of the Documents folder.
+    createdAt:existingDocument?.createdAt || existingDocument?.savedAt || new Date().toISOString(),
+    savedAt:existingDocument?.savedAt || new Date().toISOString()
   };
 }
 let currentEditingDocumentId=null;
@@ -1718,6 +1748,10 @@ function saveCurrentDocument(silent=false){
   if(index<0) index=list.findIndex(x=>x.subject===subject && x.ref===ref);
   if(index>=0){
     doc.id=list[index].id;
+    // Preserve the original creation/order metadata even when an existing
+    // document is matched by reference instead of currentEditingDocumentId.
+    doc.createdAt=list[index].createdAt||list[index].savedAt||doc.createdAt;
+    doc.savedAt=list[index].savedAt||doc.savedAt;
     list[index]=doc;
   }else{
     list.unshift(doc);
@@ -1969,7 +2003,8 @@ function duplicateSavedDocument(id){
   copy.id='doc_'+Date.now()+'_'+Math.random().toString(36).slice(2,8);
   copy.ref=nextReference(subject);
   copy.fileName=(clean(copy.customer)||'Party')+' — '+copy.ref;
-  copy.savedAt=new Date().toISOString();
+  copy.createdAt=new Date().toISOString();
+  copy.savedAt=copy.createdAt;
   const list=getSavedDocuments();
   list.unshift(copy);
   setSavedDocuments(list);
@@ -2011,13 +2046,13 @@ function renderDocumentPortal(){
   filtered=[...filtered].sort((a,b)=>{
     if(sort==="customer") return String(a.customer||"").localeCompare(String(b.customer||""),undefined,{sensitivity:"base"});
     if(sort==="reference") return String(a.ref||"").localeCompare(String(b.ref||""),undefined,{sensitivity:"base"});
-    const ad=Date.parse(a.savedAt||a.date||"")||0, bd=Date.parse(b.savedAt||b.date||"")||0;
+    const ad=Date.parse(a.createdAt||a.savedAt||a.date||"")||0, bd=Date.parse(b.createdAt||b.savedAt||b.date||"")||0;
     return sort==="oldest" ? ad-bd : bd-ad;
   });
   const name=document.getElementById("portalFolderName"); if(name) name.textContent=title;
   const count=document.getElementById("portalFolderCount"); if(count) count.textContent=filtered.length+" document"+(filtered.length===1?"":"s");
   const total=all.length, qCount=all.filter(x=>x.subject==='QUOTATION').length, iCount=all.filter(x=>x.subject==='INVOICE').length;
-  const latest=[...all].sort((a,b)=>(Date.parse(b.savedAt||b.date||'')||0)-(Date.parse(a.savedAt||a.date||'')||0))[0];
+  const latest=[...all].sort((a,b)=>(Date.parse(b.createdAt||b.savedAt||b.date||'')||0)-(Date.parse(a.createdAt||a.savedAt||a.date||'')||0))[0];
   const st=document.getElementById('statTotal'); if(st) st.textContent=total;
   const sq=document.getElementById('statQuotations'); if(sq) sq.textContent=qCount;
   const si=document.getElementById('statInvoices'); if(si) si.textContent=iCount;
@@ -2025,7 +2060,7 @@ function renderDocumentPortal(){
   const box=document.getElementById("portalFiles"); if(!box)return;
   if(!filtered.length){box.innerHTML='<div class="portal-empty"><div class="portal-empty-icon">'+(savedFolderFilter==='TRASH'?'🗑️':'📭')+'</div><strong>'+(savedFolderFilter==='TRASH'?'Recycle Bin is empty':'No documents found')+'</strong><div style="margin-top:5px">'+(savedFolderFilter==='TRASH'?'Deleted documents will be temporarily stored here.':'There are currently no saved documents in this folder.')+'</div></div>'; updateSelectedDocumentCount(); return;}
   box.innerHTML=filtered.map(x=>{
-    const d=x.savedAt?new Date(x.savedAt).toLocaleString(undefined,{day:"2-digit",month:"short",year:"numeric",hour:"2-digit",minute:"2-digit"}):(x.date?formatDateForPdf(x.date):"No date");
+    const d=x.date?formatDateForPdf(x.date):(x.createdAt?new Date(x.createdAt).toLocaleDateString(undefined,{day:"2-digit",month:"short",year:"numeric"}):"No date");
     const safeId=String(x.id).replace(/[^a-zA-Z0-9_-]/g,"");
     const actions=savedFolderFilter==='TRASH'
       ? `<button type="button" class="btn secondary" onclick="restoreSavedDocument('${safeId}')">↩ Restore</button><button type="button" class="btn danger" onclick="permanentlyDeleteDocument('${safeId}')">Delete Forever</button>`
@@ -2360,10 +2395,12 @@ async function generatePDF(openPdf=false, printOnly=false){
           const sigBytes=Uint8Array.from(atob(sigB64),c=>c.charCodeAt(0));
           const sigImg=await pdf.embedPng(sigBytes);
           const iw=sigImg.width||300, ih=sigImg.height||100;
-          const maxW=190, maxH=48;
+          const maxW=190, maxH=35;
           const ratio=Math.min(maxW/iw,maxH/ih);
           const sw=Math.max(1,iw*ratio), sh=Math.max(1,ih*ratio);
-          page.drawImage(sigImg,{x:72,y:pageH-(700+sh),width:sw,height:sh});
+          // Signature sits in its own space immediately above the name.
+          // Keep its bottom at/above the name line so the ink never crosses the writing.
+          page.drawImage(sigImg,{x:72,y:pageH-(675+sh),width:sw,height:sh});
           signatureDrawn=true;
         }
       }catch(e){ console.warn("Document signature render failed:",e); }
