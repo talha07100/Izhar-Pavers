@@ -3069,20 +3069,26 @@ window.transferAdminOwnership=async function(){
   if(!/^[-a-z0-9._%+]+@gmail\.com$/i.test(newOwner)){ alert("Please enter a valid Gmail address (example@gmail.com)."); return; }
   if(newOwner!==confirmed){ alert("The two Gmail addresses do not match. Please enter the same Gmail in both boxes."); return; }
   if(newOwner===oldOwner){ alert("This account is already the current Owner."); return; }
-  if(!cloudDb){ alert("Cloud connection is not ready. Please wait a moment and try again."); return; }
+  if(!cloudDb || !cloudUser){ alert("Firebase/Google connection is not ready. Please sign in with the current Owner Gmail and wait until Cloud sync is active."); return; }
+  if(!authorizationChecked){ alert("Authorization is still loading from Firebase. Please wait a few seconds and try again."); return; }
   if(authorizationConfig.pendingOwnershipTransfer?.status==="pending"){ alert("A transfer is already pending. Cancel it first before creating another one."); return; }
   if(!confirm("Create a pending ownership transfer to "+newOwner+"?\n\nOwnership will NOT change now. The new Gmail must sign in with Google and press Accept Ownership. Until then, you remain the Owner and can cancel the request.")) return;
   const pendingTransfer={email:newOwner,status:"pending",requestedBy:oldOwner,requestedAt:new Date().toISOString()};
   const nextConfig={...authorizationConfig,ownerEmail:oldOwner,pendingOwnershipTransfer:pendingTransfer,updatedAt:new Date().toISOString()};
   try{
-    await withTimeout(setDoc(doc(cloudDb,"appConfig","authorization"),nextConfig,{merge:true}),20000,"Ownership transfer request");
+    await withTimeout(getDoc(doc(cloudDb,"appConfig","authorization")),8000,"Firebase/Firestore connection check");
+    await withTimeout(setDoc(doc(cloudDb,"appConfig","authorization"),nextConfig,{merge:true}),10000,"Ownership transfer save");
     authorizationConfig=nextConfig;
     localStorage.setItem("izhar_pavers_authorization_config_v1",JSON.stringify(nextConfig));
     mirrorAuthorizationLocalStorage();
     if(input) input.value=""; if(confirmInput) confirmInput.value="";
     renderAuthorizationUI();
     alert("Transfer request created. The new Gmail must sign in with Google and accept ownership. Your current ownership is unchanged.");
-  }catch(e){ console.error(e); alert("Ownership transfer request failed: "+(e?.message||e)); }
+  }catch(e){
+    console.error("Ownership transfer failed:",e);
+    const msg=String(e?.message||e||"Unknown error");
+    alert("Transfer request failed.\n\n"+msg+"\n\nIf this says permission-denied, deploy the included firestore.rules to the same Firebase project. If it says timed out/offline, check the Firebase project/config or internet connection.");
+  }
 };
 
 window.cancelOwnershipTransfer=async function(){
