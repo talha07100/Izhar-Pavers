@@ -20,15 +20,19 @@ service cloud.firestore {
       return signedIn()
         && exists(/databases/$(database)/documents/appConfig/authorization)
         && (
-          ('ownerUid' in authDoc().data
+          (
+            'ownerUid' in authDoc().data
             && authDoc().data.ownerUid != null
             && authDoc().data.ownerUid != ''
-            && request.auth.uid == authDoc().data.ownerUid)
+            && request.auth.uid == authDoc().data.ownerUid
+          )
           ||
-          ((!('ownerUid' in authDoc().data)
-            || authDoc().data.ownerUid == null
-            || authDoc().data.ownerUid == '')
-            && request.auth.token.email == authDoc().data.ownerEmail)
+          (
+            (!('ownerUid' in authDoc().data)
+              || authDoc().data.ownerUid == null
+              || authDoc().data.ownerUid == '')
+            && request.auth.token.email == authDoc().data.ownerEmail
+          )
         );
     }
 
@@ -55,66 +59,49 @@ service cloud.firestore {
     match /appConfig/authorization {
       allow read: if signedIn();
 
-      // First-time bootstrap only.
       allow create: if bootstrapOwner()
         && request.resource.data.ownerEmail == 'talhakhan14746@gmail.com'
         && request.resource.data.ownerUid == request.auth.uid
         && validAdminList(request.resource.data);
 
-      // Bootstrap account may establish/recover its own UID only while it is
-      // still the configured bootstrap owner.
+      // Bootstrap owner can repair/establish the owner UID.
       allow update: if bootstrapOwner()
-        && resource.data.ownerEmail == 'talhakhan14746@gmail.com'
         && request.resource.data.ownerEmail == 'talhakhan14746@gmail.com'
         && request.resource.data.ownerUid == request.auth.uid
         && validAdminList(request.resource.data);
 
-      // Normal Owner/Admin changes that do not change ownership.
+      // Normal Admin management: owner identity cannot be changed here.
       allow update: if currentAdmin()
         && validAdminList(request.resource.data)
         && request.resource.data.ownerEmail == resource.data.ownerEmail
         && request.resource.data.ownerUid == resource.data.ownerUid;
 
-      // NEW OWNER ACCEPTANCE: the target account can become Owner only when
-      // an existing Owner-created transfer request is accepted in the same
-      // atomic batch. The previous Owner must be removed from Admin/Authorized.
+      // Ownership acceptance: the signed-in Gmail must be the exact
+      // requested Gmail, and both the request and authorization change
+      // must happen in the same Firestore batch.
       allow update: if signedIn()
-        && exists(/databases/$(database)/documents/appConfig/ownershipTransfers/$(request.auth.uid))
-        && getAfter(/databases/$(database)/documents/appConfig/ownershipTransfers/$(request.auth.uid)).data.status == 'accepted'
-        && getAfter(/databases/$(database)/documents/appConfig/ownershipTransfers/$(request.auth.uid)).data.toOwnerUid == request.auth.uid
-        && getAfter(/databases/$(database)/documents/appConfig/ownershipTransfers/$(request.auth.uid)).data.toOwnerEmail == request.auth.token.email
-        && getAfter(/databases/$(database)/documents/appConfig/ownershipTransfers/$(request.auth.uid)).data.fromOwnerUid == resource.data.ownerUid
-        && getAfter(/databases/$(database)/documents/appConfig/ownershipTransfers/$(request.auth.uid)).data.fromOwnerEmail == resource.data.ownerEmail
+        && request.auth.token.email == request.resource.data.ownerEmail
         && request.resource.data.ownerUid == request.auth.uid
-        && request.resource.data.ownerEmail == request.auth.token.email
-        && request.resource.data.ownerUid != resource.data.ownerUid
+        && request.resource.data.ownerEmail != resource.data.ownerEmail
         && request.resource.data.adminEmails.hasAll([request.auth.token.email])
         && request.resource.data.authorizedEmails.hasAll([request.auth.token.email])
         && !request.resource.data.adminEmails.hasAny([resource.data.ownerEmail])
         && !request.resource.data.authorizedEmails.hasAny([resource.data.ownerEmail])
-        && validAdminList(request.resource.data);
-
-      // NEW OWNER REJECTION: target may reject the pending request and remove
-      // itself from Authorized, while the existing Owner remains unchanged.
-      allow update: if signedIn()
-        && exists(/databases/$(database)/documents/appConfig/ownershipTransfers/$(request.auth.uid))
-        && getAfter(/databases/$(database)/documents/appConfig/ownershipTransfers/$(request.auth.uid)).data.status == 'rejected'
-        && getAfter(/databases/$(database)/documents/appConfig/ownershipTransfers/$(request.auth.uid)).data.toOwnerUid == request.auth.uid
-        && getAfter(/databases/$(database)/documents/appConfig/ownershipTransfers/$(request.auth.uid)).data.fromOwnerUid == resource.data.ownerUid
-        && request.resource.data.ownerUid == resource.data.ownerUid
-        && request.resource.data.ownerEmail == resource.data.ownerEmail
-        && !request.resource.data.authorizedEmails.hasAny([request.auth.token.email])
-        && request.resource.data.adminEmails == resource.data.adminEmails
-        && request.resource.data.adminEmails.hasAll([resource.data.ownerEmail])
-        && validAdminList(request.resource.data);
+        && validAdminList(request.resource.data)
+        && exists(/databases/$(database)/documents/appConfig/ownershipTransfers/$(request.auth.token.email))
+        && getAfter(/databases/$(database)/documents/appConfig/ownershipTransfers/$(request.auth.token.email)).data.status == 'accepted'
+        && getAfter(/databases/$(database)/documents/appConfig/ownershipTransfers/$(request.auth.token.email)).data.toOwnerEmail == request.auth.token.email
+        && getAfter(/databases/$(database)/documents/appConfig/ownershipTransfers/$(request.auth.token.email)).data.fromOwnerEmail == resource.data.ownerEmail
+        && getAfter(/databases/$(database)/documents/appConfig/ownershipTransfers/$(request.auth.token.email)).data.fromOwnerUid == resource.data.ownerUid;
 
       allow delete: if false;
     }
 
-    match /appConfig/ownershipTransfers/{targetUid} {
-      // Current Owner creates a request for the exact verified target UID.
+    match /appConfig/ownershipTransfers/{targetEmail} {
+      // Current Owner creates a request. No secondary login or target UID
+      // is needed; the target must later sign in with this exact Gmail.
       allow create: if currentOwner()
-        && targetUid == request.resource.data.toOwnerUid
+        && targetEmail == request.resource.data.toOwnerEmail
         && request.resource.data.status == 'pending'
         && request.resource.data.fromOwnerUid == request.auth.uid
         && request.resource.data.fromOwnerEmail == request.auth.token.email
@@ -123,20 +110,18 @@ service cloud.firestore {
 
       allow read: if signedIn()
         && (
-          request.auth.uid == targetUid
+          request.auth.token.email == targetEmail
           || request.auth.uid == resource.data.fromOwnerUid
         );
 
-      // Target can accept or reject its own request. The authorization write
-      // is separately protected by getAfter() above.
+      // Target Gmail accepts/rejects its own request.
       allow update: if signedIn()
-        && request.auth.uid == targetUid
-        && resource.data.toOwnerUid == request.auth.uid
+        && request.auth.token.email == targetEmail
+        && resource.data.toOwnerEmail == request.auth.token.email
         && resource.data.status == 'pending'
-        && request.resource.data.toOwnerUid == resource.data.toOwnerUid
+        && request.resource.data.fromOwnerEmail == resource.data.fromOwnerEmail
         && request.resource.data.fromOwnerUid == resource.data.fromOwnerUid
         && request.resource.data.toOwnerEmail == resource.data.toOwnerEmail
-        && request.resource.data.fromOwnerEmail == resource.data.fromOwnerEmail
         && request.resource.data.status in ['accepted', 'rejected'];
 
       allow delete: if false;
