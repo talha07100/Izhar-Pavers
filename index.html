@@ -1528,7 +1528,33 @@ function formatDateForPdf(value){
 const STORAGE_KEY="izhar_pavers_saved_documents_v1";
 const TRASH_KEY="izhar_pavers_recycle_bin_v1";
 const REF_SETTINGS_KEY="izhar_pavers_reference_settings_v1";
+const LEGACY_STORAGE_KEYS=["izhar_saved_docs","izhar_pavers_saved_documents"];
 let savedFolderFilter="ALL";
+
+// One-time migration for documents saved by older builds. This prevents an
+// older storage key from appearing empty after the app is updated.
+(function migrateLegacySavedDocuments(){
+  try{
+    const current=JSON.parse(localStorage.getItem(STORAGE_KEY)||"[]");
+    if(Array.isArray(current) && current.length) return;
+    for(const key of LEGACY_STORAGE_KEYS){
+      const raw=localStorage.getItem(key);
+      if(!raw) continue;
+      const legacy=JSON.parse(raw);
+      if(!Array.isArray(legacy) || !legacy.length) continue;
+      const normalized=legacy.map((d,i)=>({
+        ...d,
+        id:String(d?.id||d?.ref||(`legacy_${Date.now()}_${i}`)),
+        createdAt:d?.createdAt||d?.savedAt||d?.date||new Date().toISOString(),
+        savedAt:d?.savedAt||d?.createdAt||new Date().toISOString(),
+        updatedAt:d?.updatedAt||d?.savedAt||new Date().toISOString(),
+        isDeleted:false
+      }));
+      localStorage.setItem(STORAGE_KEY,JSON.stringify(normalized));
+      break;
+    }
+  }catch(e){ console.warn("Legacy document migration skipped:",e); }
+})();
 const DEFAULT_REF_SETTINGS={
   QUOTATION:{prefix:"QTN-2026-",start:1},
   INVOICE:{prefix:"INV-2026-",start:1}
@@ -2466,6 +2492,20 @@ async function generatePDF(openPdf=false, printOnly=false, persist=true){
     // above the office/branch line. It is deliberately NOT tied to the
     // "LIMITED" company-line baseline, preventing overlap.
     const officeLine="Karachi, Islamabad, Faisalabad, Jauharabad, Hatar";
+    // Define the computer-generated note position BEFORE calculating the office
+    // line.  The previous build referenced noteTop before its declaration, which
+    // caused the mobile browser error: "Cannot access 'noteTop' before initialization".
+    let noteTop=phoneTop+17;
+    if(footerSignOff){
+      const refNow=clean(document.getElementById("ref").value);
+      const savedNote=clean(profile.computerGeneratedText);
+      const finalNote=savedNote
+        ? savedNote.replace(/Ref#(?:\s*)/i,`Ref#${refNow?" "+refNow:""}`)
+        : `This is a computer-generated document issued under Ref#${refNow?" "+refNow:""} and does not require a signature.`;
+      const noteLines=wrapLines(finalNote,timesI,7.8,450);
+      noteLines.forEach((ln,i)=>drawText(page,timesI,ln,footerX,noteTop+i*10,7.8,{maxWidth:450,color:rgb(0.3,0.3,0.3)}));
+      noteTop+=Math.max(10,noteLines.length*10)+8;
+    }
     const officeTop=Math.min(footerBottomTop,noteTop);
     try{
       const stampData=profile.stampData||DEFAULT_STAMP_DATA;
@@ -2489,20 +2529,6 @@ async function generatePDF(openPdf=false, printOnly=false, persist=true){
       });
     }catch(e){
       console.warn("Document stamp render failed:",e);
-    }
-
-    // Computer-generated note is shown ONLY when Signature is OFF. It is
-    // positioned after the phone line so it can never cover the profile block.
-    let noteTop=phoneTop+17;
-    if(footerSignOff){
-      const refNow=clean(document.getElementById("ref").value);
-      const savedNote=clean(profile.computerGeneratedText);
-      const finalNote=savedNote
-        ? savedNote.replace(/Ref#(?:\s*)/i,`Ref#${refNow?" "+refNow:""}`)
-        : `This is a computer-generated document issued under Ref#${refNow?" "+refNow:""} and does not require a signature.`;
-      const noteLines=wrapLines(finalNote,timesI,7.8,450);
-      noteLines.forEach((ln,i)=>drawText(page,timesI,ln,footerX,noteTop+i*10,7.8,{maxWidth:450,color:rgb(0.3,0.3,0.3)}));
-      noteTop+=Math.max(10,noteLines.length*10)+8;
     }
 
     // Keep the branch/location line below the dynamically-sized footer content.
