@@ -15,6 +15,12 @@
 <title>Izhar Pavers — Quotation / Invoice Generator</title>
 <style>
 *{box-sizing:border-box}
+/* Remove browser default blue focus ring/highlight. */
+*:focus, input:focus, textarea:focus, select:focus, button:focus {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
 body{margin:0;background:#eef1f5;font-family:Arial,sans-serif;color:#111}
 .wrap{max-width:1050px;margin:24px auto;padding:16px}
 h1{margin:0 0 6px;font-size:24px}
@@ -1524,6 +1530,7 @@ function formatDateForPdf(value){
 }
 
 const STORAGE_KEY="izhar_pavers_saved_documents_v1";
+const LEGACY_STORAGE_KEY="izhar_saved_docs";
 const TRASH_KEY="izhar_pavers_recycle_bin_v1";
 const REF_SETTINGS_KEY="izhar_pavers_reference_settings_v1";
 let savedFolderFilter="ALL";
@@ -1558,14 +1565,39 @@ function normalizeDocumentIds(list){
 }
 function getSavedDocuments(){
   try{
-    const docs=JSON.parse(localStorage.getItem(STORAGE_KEY)||"[]");
+    let raw=localStorage.getItem(STORAGE_KEY);
+    if(!raw){
+      const legacy=localStorage.getItem(LEGACY_STORAGE_KEY);
+      if(legacy){
+        try{
+          const legacyDocs=JSON.parse(legacy);
+          if(Array.isArray(legacyDocs) && legacyDocs.length){
+            const migrated=legacyDocs.map((d,i)=>({
+              ...d, id:d?.id || ("legacy_"+Date.now()+"_"+i),
+              subject:(d?.subject||"QUOTATION").toUpperCase(),
+              createdAt:d?.createdAt || d?.savedAt || d?.date || new Date().toISOString(),
+              savedAt:d?.savedAt || new Date().toISOString(), isDeleted:false
+            }));
+            localStorage.setItem(STORAGE_KEY,JSON.stringify(migrated)); raw=JSON.stringify(migrated);
+          }
+        }catch(e){}
+      }
+    }
+    const docs=JSON.parse(raw||"[]");
     const list=Array.isArray(docs)?docs.filter(x=>x && (x.subject==="QUOTATION" || x.subject==="INVOICE")):[];
     const normalized=normalizeDocumentIds(list);
     if(JSON.stringify(normalized)!==JSON.stringify(list)) localStorage.setItem(STORAGE_KEY,JSON.stringify(normalized));
     return normalized;
   }catch(e){return []}
 }
-function setSavedDocuments(list){localStorage.setItem(STORAGE_KEY,JSON.stringify(normalizeDocumentIds(list)));}
+
+function setSavedDocuments(list){
+  const normalized=normalizeDocumentIds(list);
+  const payload=JSON.stringify(normalized);
+  localStorage.setItem(STORAGE_KEY,payload);
+  try{ localStorage.setItem(LEGACY_STORAGE_KEY,payload); }catch(e){}
+  return true;
+}
 function getRecycleBinDocuments(){
   try{
     const docs=JSON.parse(localStorage.getItem(TRASH_KEY)||"[]");
@@ -1767,7 +1799,17 @@ function saveCurrentDocument(silent=false){
     list.unshift(doc);
   }
   currentEditingDocumentId=doc.id;
-  setSavedDocuments(list);
+  try{
+    setSavedDocuments(list);
+    const verify=getSavedDocuments().find(x=>String(x.id)===String(doc.id));
+    if(!verify) throw new Error("Saved document could not be verified in localStorage.");
+  }catch(error){
+    const status=document.getElementById("status");
+    if(status) status.textContent="Save failed: browser storage is unavailable or full. Please try again.";
+    if(!silent) alert("File save nahi ho saki. Browser storage full/blocked ho sakti hai. Please try again.");
+    console.error("Izhar Pavers save error:",error);
+    return false;
+  }
   renderSavedDocuments();
   if(!silent){
     const status=document.getElementById("status");
