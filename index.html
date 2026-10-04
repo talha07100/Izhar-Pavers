@@ -203,7 +203,10 @@ body:has(.documents-portal.open) .saved-card{display:none}
 .master-term-delete{min-width:34px;height:34px;padding:0;border-radius:9px}
 .term-row{position:relative;padding-left:42px}.term-style-controls{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:7px}.term-style-btn{min-width:34px;height:32px;padding:0 8px;border-radius:8px}.term-style-btn.active{background:#14213d;color:#fff;border-color:#14213d}.term-size-label{font-size:12px;font-weight:700;color:#596273;min-width:44px;text-align:center}
 .term-row::before{content:counter(terms);counter-increment:terms;position:absolute;left:0;top:2px;width:32px;height:32px;border-radius:9px;background:#14213d;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px}
-#termsList{counter-reset:terms}
+#termsList{counter-reset:terms;height:auto !important;min-height:0 !important;max-height:none !important;overflow:visible !important;}
+#termsBox,.terms-conditions-container{height:auto !important;min-height:0 !important;max-height:none !important;overflow:visible !important;}
+#termsList .actual-term-editor-row{height:auto !important;max-height:none !important;overflow:visible !important;}
+
 @media(max-width:700px){.master-term-box{gap:7px}.master-term-number{width:28px;min-width:28px;height:30px}.term-row{padding-left:38px}}
 
 .authorization-card{border:1px solid #dbe2ea;background:#fff;border-radius:14px;padding:16px;margin-bottom:14px}
@@ -1543,7 +1546,7 @@ function normalizeDocumentIds(list){
     // by this app used a millisecond timestamp at the start of their id, so use
     // that as the best available original creation time before falling back.
     if(!copy.createdAt){
-      const idStamp=String(copy.id||"").match(/^(\\d{13})_/);
+      const idStamp=String(copy.id||"").match(/^(\d{13})_/);
       if(idStamp){
         const d=new Date(Number(idStamp[1]));
         if(!Number.isNaN(d.getTime())) copy.createdAt=d.toISOString();
@@ -1813,7 +1816,7 @@ async function openSavedDocumentPDF(id){
   const previousEditingId=currentEditingDocumentId;
   try{
     applySavedDocumentToForm(doc,false);
-    const ok=await generatePDF(true);
+    const ok=await generatePDF(true,false,false);
     if(!ok){
       const status=document.getElementById("status");
       if(status) status.textContent="PDF open failed. Please try Open PDF again.";
@@ -1833,7 +1836,7 @@ async function printSavedDocument(id){
   const previousEditingId=currentEditingDocumentId;
   try{
     applySavedDocumentToForm(doc,false);
-    const ok=await generatePDF(false,true);
+    const ok=await generatePDF(false,true,false);
     if(!ok){
       const status=document.getElementById("status");
       if(status) status.textContent="PDF print failed. Please try Print again.";
@@ -1857,7 +1860,7 @@ async function downloadSavedDocument(id){
   const previousEditingId=currentEditingDocumentId;
   try{
     applySavedDocumentToForm(doc,false);
-    const ok=await generatePDF();
+    const ok=await generatePDF(false,false,false);
     if(!ok){
       const status=document.getElementById("status");
       if(status) status.textContent="PDF download failed. Please try Download PDF again.";
@@ -2155,12 +2158,15 @@ function validateQuotationBeforeCreate(){
   return true;
 }
 
-async function generatePDF(openPdf=false, printOnly=false){
+async function generatePDF(openPdf=false, printOnly=false, persist=true){
   if(window.requireCloudLogin && !window.requireCloudLogin()) return false;
   if(!validateQuotationBeforeCreate()) return false;
   const subject=(document.getElementById("subject").value||"QUOTATION").toUpperCase();
-  if(!clean(document.getElementById("ref").value)) document.getElementById("ref").value=nextReference(subject);
-  saveCurrentDocument(true);
+  // A saved document opened/viewed from the Documents folder is read-only.
+  // Only the explicit Save / Update action (or normal new-document PDF generation)
+  // may create/update storage metadata such as savedAt/createdAt.
+  if(!clean(document.getElementById("ref").value) && persist) document.getElementById("ref").value=nextReference(subject);
+  if(persist) saveCurrentDocument(true);
   // Open a blank tab immediately when requested so mobile browsers allow the PDF viewer tab.
   const pdfWindow=(openPdf || printOnly) ? window.open("about:blank","_blank") : null;
   if(openPdf && !pdfWindow){
@@ -2169,7 +2175,7 @@ async function generatePDF(openPdf=false, printOnly=false){
   }
   const status=document.getElementById("status"); status.textContent="Generating PDF…";
   try{
-    saveCurrentDocument(true);
+    if(persist) saveCurrentDocument(true);
     const bytes=Uint8Array.from(atob(TEMPLATE_B64),c=>c.charCodeAt(0));
     const pdf=await PDFDocument.load(bytes);
     const page=pdf.getPages()[0];
@@ -2395,12 +2401,13 @@ async function generatePDF(openPdf=false, printOnly=false){
           const sigBytes=Uint8Array.from(atob(sigB64),c=>c.charCodeAt(0));
           const sigImg=await pdf.embedPng(sigBytes);
           const iw=sigImg.width||300, ih=sigImg.height||100;
-          const maxW=190, maxH=35;
+          const maxW=190, maxH=32;
           const ratio=Math.min(maxW/iw,maxH/ih);
           const sw=Math.max(1,iw*ratio), sh=Math.max(1,ih*ratio);
-          // Signature sits in its own space immediately above the name.
-          // Keep its bottom at/above the name line so the ink never crosses the writing.
-          page.drawImage(sigImg,{x:72,y:pageH-(675+sh),width:sw,height:sh});
+          // Dedicated signature area: keep the ink clearly above "Talha Khan".
+          // The name starts at top=710, so leave about 8px of visual breathing room.
+          const signatureTop=670;
+          page.drawImage(sigImg,{x:72,y:pageH-(signatureTop+sh),width:sw,height:sh});
           signatureDrawn=true;
         }
       }catch(e){ console.warn("Document signature render failed:",e); }
