@@ -15,7 +15,7 @@ service cloud.firestore {
 
     function bootstrapOwner() {
       return verifiedEmail()
-        && request.auth.token.email == 'talhakhan14746@gmail.com';
+        && request.auth.token.email == 'talhakhan14747@gmail.com';
     }
 
     function authDoc() {
@@ -102,6 +102,18 @@ service cloud.firestore {
         && request.resource.data.status == 'pending'
         && request.resource.data.fromOwnerUid == request.auth.uid
         && request.resource.data.fromOwnerEmail == request.auth.token.email
+        && request.resource.data.toOwnerEmail != request.auth.token.email
+        && request.resource.data.toOwnerEmail.matches('^[A-Za-z0-9._%+-]+@gmail\\.com$');
+
+      // The current Owner may replace an older pending request for the same
+      // Gmail. This makes retrying a transfer safe without granting the Owner
+      // permission to accept/reject the transfer on behalf of the target.
+      allow update: if currentOwner()
+        && targetEmail == request.resource.data.toOwnerEmail
+        && resource.data.fromOwnerEmail == request.auth.token.email
+        && request.resource.data.fromOwnerEmail == request.auth.token.email
+        && request.resource.data.fromOwnerUid == request.auth.uid
+        && request.resource.data.status == 'pending'
         && request.resource.data.toOwnerEmail != request.auth.token.email
         && request.resource.data.toOwnerEmail.matches('^[A-Za-z0-9._%+-]+@gmail\\.com$');
 
