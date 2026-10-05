@@ -2282,10 +2282,10 @@ async function generatePDF(openPdf=false, printOnly=false, persist=true){
         const desc=clean(tr.querySelector(".desc").value);
         const fsize=14*scale;
         const lines=wrapAt(desc,times,fsize,145);
-        const rh=Math.max(22,lines.length*16+6)*scale;
+        const rh=Math.max(26,lines.length*18+8)*scale;
         h+=rh;
       });
-      h+=22*scale; // total row
+      h+=28*scale; // total row
       if(paymentEnabled){
         h+=52*scale;
         if(showPaymentDetails&&paymentData.length) h+=(28+paymentData.length*11)*scale;
@@ -2343,9 +2343,9 @@ async function generatePDF(openPdf=false, printOnly=false, persist=true){
       drawScaledText(timesBI,"Description",109,top+6,14);
       drawScaledText(timesBI,"UOM",262,top+6,14);
       drawScaledText(timesBI,"Qty.",306,top+6,14);
-      drawScaledText(timesBI,"Rate",379,top+6,14);
-      drawScaledText(timesBI,"(PKR)",382,top+18,14);
-      drawScaledText(timesBI,"Amount (PKR)",432,top+11,14);
+      drawScaledText(timesBI,"Rate",374,top+4,14,{maxWidth:65});
+      drawScaledText(timesBI,"(PKR)",376,top+18,14,{maxWidth:65});
+      drawScaledText(timesBI,"Amount (PKR)",430,top+10,14,{maxWidth:94});
     };
     drawHeader(cursor); cursor+=31;
     let total=0;
@@ -2354,27 +2354,28 @@ async function generatePDF(openPdf=false, printOnly=false, persist=true){
       const qty=clean(tr.querySelector(".qty").value),rate=clean(tr.querySelector(".rate").value);
       const amount=num(qty)*num(rate); total+=amount;
       const lines=wrapAt(desc,times,14*scale,145);
-      const rh=Math.max(22,lines.length*16+6);
+      const rh=Math.max(26,lines.length*18+8);
       // Full row borders, including the outer left/right edges.
       [x0,x1,x2,x3,x4,x5,x6].forEach(x=>drawScaledLine(x,cursor,x,cursor+rh));
       drawScaledLine(x0,cursor+rh,x6,cursor+rh);
-      drawScaledText(times,String(i+1).padStart(2,"0")+"-",77,cursor+6,14);
-      lines.forEach((ln,j)=>drawScaledText(times,ln,109,cursor+5+j*16,10.2,{maxWidth:145}));
-      drawScaledText(times,uom,262,cursor+6,10.2,{maxWidth:35});
-      drawScaledText(times,qty,304,cursor+6,10.2,{maxWidth:55});
-      drawScaledText(times,rate?String(num(rate)).replace(/\.0+$/,'')+"/no":"",378,cursor+6,10.2,{maxWidth:65});
-      drawScaledText(times,amount?fmt(amount):"",464,cursor+6,10.2,{maxWidth:58});
+      drawScaledText(times,String(i+1).padStart(2,"0")+"-",77,cursor+5,14);
+      lines.forEach((ln,j)=>drawScaledText(times,ln,109,cursor+4+j*18,14,{maxWidth:145}));
+      drawScaledText(times,uom,262,cursor+4,14,{maxWidth:35});
+      drawScaledText(times,qty,304,cursor+4,14,{maxWidth:55});
+      const rateText=rate?String(num(rate)).replace(/\.0+$/,'')+"/no":"";
+      drawScaledText(times,rateText,378,cursor+4,14,{maxWidth:65});
+      drawScaledText(times,amount?fmt(amount):"",464,cursor+4,14,{maxWidth:58});
       cursor+=rh;
     });
     // Total row: full cell border + separator before the amount cell.
     drawScaledLine(x0,cursor,x6,cursor);
-    drawScaledLine(x0,cursor+22,x6,cursor+22);
-    drawScaledLine(x0,cursor,x0,cursor+22);
-    drawScaledLine(x5,cursor,x5,cursor+22);
-    drawScaledLine(x6,cursor,x6,cursor+22);
-    drawScaledText(timesBI,"Total Amount (PKR)",198,cursor+5,14);
-    drawScaledText(timesBI,fmt(total),464,cursor+5,14);
-    cursor+=22;
+    drawScaledLine(x0,cursor+28,x6,cursor+28);
+    drawScaledLine(x0,cursor,x0,cursor+28);
+    drawScaledLine(x5,cursor,x5,cursor+28);
+    drawScaledLine(x6,cursor,x6,cursor+28);
+    drawScaledText(timesBI,"Total Amount (PKR)",198,cursor+6,14);
+    drawScaledText(timesBI,fmt(total),464,cursor+6,14);
+    cursor+=28;
 
     if(paymentEnabled){
       const received=showPaymentDetails?paymentData.reduce((s,p)=>s+p.amount,0):num(document.getElementById("receivedAmount").value);
@@ -3107,6 +3108,46 @@ async function rejectOwnershipTransfer(){
     setCloudMessage("Ownership transfer request rejected.");
   }catch(e){ alert("Could not reject the request: "+(e?.message||e)); }
 }
+async function finalizeAcceptedOwnershipTransfer(data){
+  if(!data || !cloudDb || !cloudUser)return false;
+  const email=normalizeEmail(cloudUser.email);
+  if(email!==normalizeEmail(data.toOwnerEmail))return false;
+  const authRef=doc(cloudDb,"appConfig","authorization");
+  const reqRef=doc(cloudDb,"ownershipTransfers",email);
+  const snap=await getDoc(authRef);
+  if(!snap.exists())throw new Error("Authorization settings were not found.");
+  const oldCfg=snap.data()||{};
+  if(normalizeEmail(oldCfg.ownerEmail)===email && String(oldCfg.ownerUid||"")===String(cloudUser.uid)){
+    authorizationConfig={ownerEmail:email,ownerUid:cloudUser.uid,enabled:oldCfg.enabled===true,authorizedEmails:Array.isArray(oldCfg.authorizedEmails)?oldCfg.authorizedEmails.map(normalizeEmail).filter(Boolean):[email],adminEmails:Array.isArray(oldCfg.adminEmails)?oldCfg.adminEmails.map(normalizeEmail).filter(Boolean):[email],updatedAt:String(oldCfg.updatedAt||new Date().toISOString())};
+    localStorage.setItem("izhar_pavers_authorization_config_v1",JSON.stringify(authorizationConfig));
+    mirrorAuthorizationLocalStorage();
+    return true;
+  }
+  if(normalizeEmail(oldCfg.ownerEmail)!==normalizeEmail(data.fromOwnerEmail)){
+    throw new Error("This transfer request is no longer valid because the current Owner has changed.");
+  }
+  const oldOwner=normalizeEmail(oldCfg.ownerEmail);
+  const oldAdmins=(Array.isArray(oldCfg.adminEmails)?oldCfg.adminEmails:[]).map(normalizeEmail).filter(Boolean);
+  const oldAuth=(Array.isArray(oldCfg.authorizedEmails)?oldCfg.authorizedEmails:[]).map(normalizeEmail).filter(Boolean);
+  const nextAdmins=[email,...new Set(oldAdmins.filter(e=>e!==oldOwner && e!==email))].slice(0,4);
+  const nextAuthorized=[email,...new Set(oldAuth.filter(e=>e!==oldOwner && e!==email))];
+  const now=new Date().toISOString();
+  // The request is marked accepted first. Firestore rules then allow only the
+  // exact target Gmail to finalize the authorization document. This avoids a
+  // fragile getAfter() dependency and also makes a failed final write retryable.
+  const reqSnap=await getDoc(reqRef);
+  if(!reqSnap.exists())throw new Error("Ownership request was not found.");
+  const reqData=reqSnap.data()||{};
+  if(normalizeEmail(reqData.toOwnerEmail)!==email || normalizeEmail(reqData.fromOwnerEmail)!==oldOwner)throw new Error("Ownership request details do not match the current Owner.");
+  if(reqData.status!=="accepted"){
+    await updateDoc(reqRef,{status:"accepted",acceptedAt:now,updatedAt:now});
+  }
+  await updateDoc(authRef,{ownerEmail:email,ownerUid:cloudUser.uid,adminEmails:nextAdmins,authorizedEmails:nextAuthorized,updatedAt:now,previousOwnerEmail:oldOwner,previousOwnerUid:String(data.fromOwnerUid||oldCfg.ownerUid||"")});
+  authorizationConfig={ownerEmail:email,ownerUid:cloudUser.uid,enabled:oldCfg.enabled===true,authorizedEmails:nextAuthorized,adminEmails:nextAdmins,updatedAt:now};
+  localStorage.setItem("izhar_pavers_authorization_config_v1",JSON.stringify(authorizationConfig));
+  mirrorAuthorizationLocalStorage();
+  return true;
+}
 window.acceptOwnershipTransfer=async function(){
   const data=pendingOwnershipTransfer;
   if(!data || !cloudDb || !cloudUser)return;
@@ -3115,55 +3156,27 @@ window.acceptOwnershipTransfer=async function(){
     alert("This transfer request does not belong to the currently signed-in Gmail account.");
     return;
   }
-  if(!confirm("ACCEPT OWNERSHIP?\n\nYour Google account will become the Owner.\nThe previous Owner will automatically be removed from Owner/Admin/authorized access.\n\nContinue?"))return;
+  if(data.status!=="accepted" && !confirm("ACCEPT OWNERSHIP?\n\nYour Google account will become the Owner.\nThe previous Owner will automatically be removed from Owner/Admin/authorized access.\n\nContinue?"))return;
   const acceptBtn=document.getElementById("acceptOwnershipTransferBtn");
   const rejectBtn=document.getElementById("rejectOwnershipTransferBtn");
   if(acceptBtn)acceptBtn.disabled=true;if(rejectBtn)rejectBtn.disabled=true;
   try{
-    const authRef=doc(cloudDb,"appConfig","authorization");
-    const reqRef=doc(cloudDb,"ownershipTransfers",email);
-    const snap=await getDoc(authRef);
-    if(!snap.exists())throw new Error("Authorization settings were not found.");
-    const oldCfg=snap.data()||{};
-    if(normalizeEmail(oldCfg.ownerEmail)!==normalizeEmail(data.fromOwnerEmail)){
-      throw new Error("This transfer request is no longer valid because the current Owner has changed.");
-    }
-    // The transfer request was created by the authenticated current Owner.
-    // Do not block a legitimate transfer merely because an older ownerUid is stale.
-    if(oldCfg.ownerUid && String(oldCfg.ownerUid)!==String(data.fromOwnerUid)){
-      console.warn("Owner UID differs from the historical transfer request; proceeding because the current Owner email matches the request.");
-    }
-    const oldOwner=normalizeEmail(oldCfg.ownerEmail);
-    const oldAdmins=(Array.isArray(oldCfg.adminEmails)?oldCfg.adminEmails:[]).map(normalizeEmail).filter(Boolean);
-    const oldAuth=(Array.isArray(oldCfg.authorizedEmails)?oldCfg.authorizedEmails:[]).map(normalizeEmail).filter(Boolean);
-    const nextAdmins=[...new Set(oldAdmins.filter(e=>e!==oldOwner && e!==email))];
-    nextAdmins.unshift(email);
-    const nextAuthorized=[...new Set(oldAuth.filter(e=>e!==oldOwner && e!==email))];
-    nextAuthorized.unshift(email);
-    const now=new Date().toISOString();
-    const batch=writeBatch(cloudDb);
-    batch.update(authRef,{
-      ownerEmail:email,
-      ownerUid:cloudUser.uid,
-      adminEmails:nextAdmins.slice(0,4),
-      authorizedEmails:nextAuthorized,
-      updatedAt:now,
-      previousOwnerEmail:oldOwner,
-      previousOwnerUid:String(data.fromOwnerUid)
-    });
-    batch.update(reqRef,{status:"accepted",acceptedAt:now,updatedAt:now});
-    await batch.commit();
-    authorizationConfig={ownerEmail:email,ownerUid:cloudUser.uid,enabled:oldCfg.enabled===true,authorizedEmails:nextAuthorized,adminEmails:nextAdmins.slice(0,4),updatedAt:now};
-    localStorage.setItem("izhar_pavers_authorization_config_v1",JSON.stringify(authorizationConfig));
-    mirrorAuthorizationLocalStorage();
+    await finalizeAcceptedOwnershipTransfer(data);
     pendingOwnershipTransfer=null;
     closeOwnershipTransferNotice();
     renderAuthorizationUI();
     setCloudMessage("You are now the Owner. The previous Owner has been automatically removed.");
-    alert("Ownership accepted successfully.\n\nYou are now the Owner.");
+    alert("Ownership transfer completed successfully.\n\nYou are now the Owner.");
   }catch(e){
-    console.error("Ownership acceptance failed:",e);
-    alert("Ownership could not be accepted.\n\nNo ownership change was completed.\n\nReason: "+(e?.message||e));
+    console.error("Ownership acceptance/finalization failed:",e);
+    // If the request is already accepted, keep it visible so the user can retry
+    // the final authorization write instead of losing the transfer request.
+    if(data.status==="accepted"){
+      setCloudMessage("Ownership request is accepted, but final ownership sync needs one more attempt. Please keep this account signed in.");
+      alert("The request is accepted, but the Owner record could not be finalized yet.\n\nNo request was lost. Please press ACCEPT OWNERSHIP again after Firebase reconnects.");
+    }else{
+      alert("Ownership could not be completed.\n\nThe request remains available for retry.\n\nReason: "+(e?.message||e));
+    }
   }finally{
     if(acceptBtn)acceptBtn.disabled=false;if(rejectBtn)rejectBtn.disabled=false;
   }
@@ -3180,7 +3193,10 @@ function watchOwnershipTransferForUser(user){
   ownershipTransferUnsubscribe=onSnapshot(ref,(snap)=>{
     if(!snap.exists()){pendingOwnershipTransfer=null;closeOwnershipTransferNotice();return;}
     const d=snap.data()||{};
-    if(d.status==="pending" && normalizeEmail(d.toOwnerEmail)===email){showOwnershipTransferNotice(d);}
+    if((d.status==="pending" || d.status==="accepted") && normalizeEmail(d.toOwnerEmail)===email){
+      showOwnershipTransferNotice(d);
+      if(d.status==="accepted") finalizeAcceptedOwnershipTransfer(d).then(ok=>{ if(ok){ pendingOwnershipTransfer=null; closeOwnershipTransferNotice(); renderAuthorizationUI(); setCloudMessage("Ownership transfer completed successfully. You are now the Owner."); } }).catch(e=>console.warn("Accepted ownership finalization retry:",e));
+    }
     else{pendingOwnershipTransfer=null;closeOwnershipTransferNotice();}
   },(e)=>console.warn("Ownership transfer notification listener:",e));
 }

@@ -74,8 +74,9 @@ service cloud.firestore {
         && request.resource.data.ownerEmail == resource.data.ownerEmail
         && request.resource.data.ownerUid == resource.data.ownerUid;
 
-      // New Owner accepts. The authorization update and transfer-request
-      // update must happen together in the same Firestore batch.
+      // New Owner finalizes an already-accepted transfer request. The target
+      // Gmail is the only account that can mark its own request accepted, and
+      // this rule then permits that same verified Gmail to become Owner.
       allow update: if verifiedEmail()
         && request.auth.token.email == request.resource.data.ownerEmail
         && request.resource.data.ownerUid == request.auth.uid
@@ -86,9 +87,9 @@ service cloud.firestore {
         && !request.resource.data.authorizedEmails.hasAny([resource.data.ownerEmail])
         && validAdminList(request.resource.data)
         && exists(/databases/$(database)/documents/ownershipTransfers/$(request.auth.token.email))
-        && getAfter(/databases/$(database)/documents/ownershipTransfers/$(request.auth.token.email)).data.status == 'accepted'
-        && getAfter(/databases/$(database)/documents/ownershipTransfers/$(request.auth.token.email)).data.toOwnerEmail == request.auth.token.email
-        && getAfter(/databases/$(database)/documents/ownershipTransfers/$(request.auth.token.email)).data.fromOwnerEmail == resource.data.ownerEmail;
+        && get(/databases/$(database)/documents/ownershipTransfers/$(request.auth.token.email)).data.status == 'accepted'
+        && get(/databases/$(database)/documents/ownershipTransfers/$(request.auth.token.email)).data.toOwnerEmail == request.auth.token.email
+        && get(/databases/$(database)/documents/ownershipTransfers/$(request.auth.token.email)).data.fromOwnerEmail == resource.data.ownerEmail;
 
       // Never delete the authorization document from the client.
       allow delete: if false;
