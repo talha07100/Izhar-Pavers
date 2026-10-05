@@ -501,8 +501,8 @@ body:has(.documents-portal.open) .saved-card{display:none}
 <div class="auth-note" style="margin-top:8px">Approved Gmail accounts:</div><div class="auth-list" id="authorizationList"></div>
 </div>
 <div class="ownership-card" id="ownershipCard" style="display:none">
-<h3 style="margin:0 0 5px">👑 Ownership Management</h3>
-<div class="auth-note">The Owner can transfer ownership to another verified Gmail account. Existing Admin access remains available for legacy Admin accounts; no new Admins can be added from this screen.</div>
+<h3 style="margin:0 0 5px">👑 Admin Management</h3>
+<div class="auth-note">Up to <strong>4 Admins</strong> can manage the app. The Owner is permanent and cannot be removed. Only the Owner can add or remove Admins.</div>
 <div class="auth-note" style="margin-top:10px;font-weight:800">Current Admins:</div>
 <div class="auth-list" id="adminList"></div>
 <div class="auth-note" style="margin-top:18px;font-weight:800">Transfer Ownership</div>
@@ -657,7 +657,7 @@ body:has(.documents-portal.open) .saved-card{display:none}
 <div class="cloud-login-note"><b>Note:</b> Google Sign-In works when this application is hosted on a web server or Firebase Hosting. A downloaded HTML file may not provide a reliable OAuth environment.</div>
 <div class="cloud-login-actions">
 <button class="btn secondary" onclick="closeCloudLogin()" type="button">Cancel</button>
-<button class="btn primary" onclick="startGoogleLogin()" type="button">Continue with Google</button>
+<button class="btn primary" id="continueGoogleBtn" type="button">Continue with Google</button>
 </div>
 <div class="hint" id="cloudLoginMessage" style="margin-top:10px"></div>
 </div>
@@ -2401,14 +2401,15 @@ async function generatePDF(openPdf=false, printOnly=false, persist=true){
     }
 
     // Dynamic document footer / signature block.
-    // The footer below intentionally follows the two approved reference PDFs:
-    // 1) Signature ON  -> signed layout (signature + stamp beside it).
-    // 2) Signature OFF -> computer-generated layout (stamp on the right +
-    //    computer-generated note).
-    // Keep these coordinates/sizes aligned with the supplied reference PDFs.
+    // IMPORTANT: the footer is rebuilt from the document's frozen profile snapshot.
+    // Clear the entire old template footer first.  The old template contained a
+    // second "Yours Truly" and old signature/stamp, which could otherwise leak
+    // through when a new profile is rendered.
     white(page,0,615,pageW,227);
 
-    // Restore the original lower-left navy template accent.
+    // Restore the original lower-left navy template accent that belongs to the
+    // page design. The previous footer clear intentionally covered it; keep it
+    // visible while still clearing the old footer text/signature/stamp.
     page.drawRectangle({x:0,y:0,width:30,height:20,color:rgb(0.02,0.12,0.35)});
 
     const footerName=clean(profile.name)||"TALHA KHAN";
@@ -2417,39 +2418,61 @@ async function generatePDF(openPdf=false, printOnly=false, persist=true){
     const footerCompany=clean(profile.companyLine)||"For IZHAR PAVERS (PVT) LIMITED";
     const footerSignOff=!!profile.computerGeneratedEnabled;
 
+    // Fixed footer layout with dynamic vertical flow.  The signature and stamp
+    // are on the same visual level; all text is given enough clearance so that
+    // nothing can overlap or be clipped.
+    const footerX=72;
+    // No-sign footer is intentionally lower and compact: "Yours Truly" and
+    // the company line sit just above Talha Khan instead of leaving a large gap.
+    const footerTopAnchor=footerSignOff ? 685 : 655;
+    const companyTop=footerTopAnchor+18;
+    const companySize=11.5;
+    const companyMaxWidth=300;
+    const companyLines=wrapLines(footerCompany,timesB,companySize,companyMaxWidth);
+    const companyLineH=companySize*1.2;
+    const companyH=Math.max(companyLineH,companyLines.length*companyLineH);
+
+    drawText(page,times,"Yours Truly,",footerX,footerTopAnchor,11.5);
+    companyLines.forEach((ln,i)=>{
+      drawText(page,timesB,ln,footerX,companyTop+i*companyLineH,companySize,{
+        maxWidth:companyMaxWidth,
+        color:rgb(0.04,0.18,0.41)
+      });
+    });
+
+    // Footer flow is different when the handwritten signature is OFF.
+    // In no-sign mode, keep "Yours Truly" + company line close above the
+    // printed name, with only a small natural gap.  This removes the old
+    // empty signature slot that was creating a large blank space.
+    let currentTop;
+    let signatureSlotTop;
+    const reservedSignatureH=40;
     let signatureDrawn=false;
+    let signatureW=0, signatureH=reservedSignatureH;
 
-    // Reference footer uses Times New Roman-style typography.
-    // pdf-lib's Times fonts are the closest embedded standard-font match.
+    if(footerSignOff){
+      currentTop=companyTop+companyH+6;
+      signatureSlotTop=currentTop;
+    }else{
+      currentTop=companyTop+companyH+8;
+      signatureSlotTop=currentTop;
+    }
+
     if(!footerSignOff){
-      // ===== SIGNATURE ON: approved signed quotation layout =====
-      drawText(page,times,"Yours Truly,",72,608,12);
-
-      // Match the reference's mixed normal/bold company line.
-      const companyPrefix="For IZHAR ";
-      if(footerCompany==="For IZHAR PAVERS (PVT) LIMITED"){
-        drawText(page,times,companyPrefix,72,622,12);
-        const prefixW=times.widthOfTextAtSize(companyPrefix,12);
-        drawText(page,timesB,"PAVERS (PVT) LIMITED",72+prefixW,622,12);
-      }else{
-        drawText(page,timesB,footerCompany,72,622,12,{maxWidth:330});
-      }
-
-      // Signature: reference image box is approximately x=53, top=656,
-      // width=188 and height=65.
       try{
-        const raw=String(profile.signatureData||DEFAULT_SIGNATURE_DATA);
-        const sigB64=raw.split(',')[1]||'';
+        const signatureData=await cropTransparentImageData(await cleanSignatureImageData(profile.signatureData||DEFAULT_SIGNATURE_DATA));
+        const sigB64=String(signatureData).split(',')[1]||'';
         if(sigB64){
           const sigBytes=Uint8Array.from(atob(sigB64),c=>c.charCodeAt(0));
           const sigImg=await pdf.embedPng(sigBytes);
-          const iw=sigImg.width||508, ih=sigImg.height||179;
-          const maxW=188, maxH=65;
+          const iw=sigImg.width||300, ih=sigImg.height||100;
+          const maxW=205, maxH=40;
           const ratio=Math.min(maxW/iw,maxH/ih);
-          const signatureW=iw*ratio, signatureH=ih*ratio;
+          signatureW=Math.max(1,iw*ratio);
+          signatureH=Math.min(reservedSignatureH,Math.max(1,ih*ratio));
           page.drawImage(sigImg,{
-            x:53,
-            y:yTop(pageH,656,signatureH),
+            x:footerX,
+            y:yTop(pageH,signatureSlotTop,signatureH),
             width:signatureW,
             height:signatureH
           });
@@ -2458,80 +2481,77 @@ async function generatePDF(openPdf=false, printOnly=false, persist=true){
       }catch(e){
         console.warn("Document signature render failed:",e);
       }
+    }
 
-      // Printed name/designation/phone positions match the signed reference.
-      drawText(page,timesBI,footerName,72,700,17.04,{maxWidth:260});
-      drawText(page,timesI,footerDesignation,72,723,11.04,{maxWidth:300});
-      drawText(page,timesI,footerPhone,72,742,11.04,{maxWidth:180});
+    // When signature is OFF there is no reason to reserve a 40pt blank
+    // signature area.  Put the name just below the company line.  When the
+    // signature is ON, retain the existing reserved slot so signed documents
+    // keep their established layout.
+    currentTop=footerSignOff
+      ? signatureSlotTop+7
+      : signatureSlotTop+reservedSignatureH+7;
 
-      // Signed reference keeps the stamp beside the signature.
-      try{
-        const stampData=profile.stampData||DEFAULT_STAMP_DATA;
-        const stampB64=String(stampData).split(',')[1]||'';
-        const stampBytes=Uint8Array.from(atob(stampB64),c=>c.charCodeAt(0));
-        const stampImg=await pdf.embedPng(stampBytes);
-        const iw=stampImg.width||270, ih=stampImg.height||273;
-        const maxW=80, maxH=80;
-        const ratio=Math.min(maxW/iw,maxH/ih);
-        const stampW=iw*ratio, stampH=ih*ratio;
-        page.drawImage(stampImg,{
-          x:252,
-          // Keep the stamp below the company line and above the designation so
-          // neither "LIMITED" nor "PAVERS" is covered.
-          y:yTop(pageH,640,stampH),
-          width:stampW,
-          height:stampH,
-          opacity:0.85
-        });
-      }catch(e){
-        console.warn("Document stamp render failed:",e);
-      }
-    }else{
-      // ===== SIGNATURE OFF: approved computer-generated quotation layout =====
-      drawText(page,times,"Yours Truly,",72,642,11.5);
-      drawText(page,timesB,footerCompany,72,660,11.5,{maxWidth:330});
+    const nameTop=currentTop;
+    const designationTop=nameTop+17;
+    const phoneTop=designationTop+15;
+    drawText(page,timesB,footerName,footerX,nameTop,9.5,{maxWidth:190});
+    drawText(page,times,footerDesignation,footerX,designationTop,8.5,{maxWidth:195});
+    drawText(page,times,`Cell: ${footerPhone}`,footerX,phoneTop,8.5,{maxWidth:180});
 
-      drawText(page,timesI,footerName,72,700,15.5,{maxWidth:240});
-      drawText(page,timesI,footerDesignation,72,727,10.5,{maxWidth:300});
-      drawText(page,times,footerPhone,72,749,10.5,{maxWidth:180});
+    // Keep the stamp beside the signature/name block, not underneath it.
+    // Its right edge stays comfortably inside the page and away from text.
+    const officeLine="Karachi, Islamabad, Faisalabad, Jauharabad, Hatar";
+    // Keep the office locations fully visible and safely inside the page.
+    // In no-sign mode the footer above is compact, so the line can sit slightly
+    // higher instead of being pushed into the viewer's bottom toolbar area.
+    const officeTop=footerSignOff ? 795 : 805;
+    try{
+      const stampData=profile.stampData||DEFAULT_STAMP_DATA;
+      const stampB64=String(stampData).split(',')[1]||'';
+      const stampBytes=Uint8Array.from(atob(stampB64),c=>c.charCodeAt(0));
+      const stampImg=await pdf.embedPng(stampBytes);
+      const iw=stampImg.width||100, ih=stampImg.height||100;
+      const maxStampW=52, maxStampH=footerSignOff ? 52 : 60;
+      const stampRatio=Math.min(maxStampW/iw,maxStampH/ih);
+      const stampW=Math.max(1,iw*stampRatio), stampH=Math.max(1,ih*stampRatio);
 
-      // Stamp moves to the right in the no-sign reference layout.
-      try{
-        const stampData=profile.stampData||DEFAULT_STAMP_DATA;
-        const stampB64=String(stampData).split(',')[1]||'';
-        const stampBytes=Uint8Array.from(atob(stampB64),c=>c.charCodeAt(0));
-        const stampImg=await pdf.embedPng(stampBytes);
-        const iw=stampImg.width||270, ih=stampImg.height||273;
-        const maxW=92, maxH=92;
-        const ratio=Math.min(maxW/iw,maxH/ih);
-        const stampW=iw*ratio, stampH=ih*ratio;
-        page.drawImage(stampImg,{
-          x:430,
-          y:yTop(pageH,674,stampH),
-          width:stampW,
-          height:stampH,
-          opacity:0.85
-        });
-      }catch(e){
-        console.warn("Document stamp render failed:",e);
-      }
+      // No-sign mode: place the stamp beside the printed name block, as a
+      // separate clean area.  It must never sit on top of the name, note or
+      // office line.  Signed mode keeps the previous signature-side position.
+      const stampTop=footerSignOff ? companyTop+7 : signatureSlotTop-2;
+      // In no-sign mode, calculate the stamp position from the actual
+      // company-line width so it sits immediately after the full
+      // "For IZHAR PAVERS (PVT) LIMITED" text instead of leaving a large gap.
+      const companyTextWidth = timesB.widthOfTextAtSize(footerCompany, companySize);
+      const noSignStampX = Math.min(footerX + companyTextWidth + 7, 500 - stampW);
+      page.drawImage(stampImg,{
+        x:footerSignOff ? noSignStampX : 205,
+        y:yTop(pageH,stampTop,stampH),
+        width:stampW,
+        height:stampH,
+        opacity:0.85
+      });
+    }catch(e){
+      console.warn("Document stamp render failed:",e);
+    }
 
-      // Reference note is below the phone number and uses bold Times.
+    // Computer-generated note is placed only when signature is OFF.  It has its
+    // own vertical area and can never collide with the stamp or office line.
+    let noteTop=phoneTop+16;
+    if(footerSignOff){
       const refNow=clean(document.getElementById("ref").value);
       const savedNote=clean(profile.computerGeneratedText);
       const finalNote=savedNote
         ? savedNote.replace(/Ref#(?:\s*)/i,`Ref#${refNow?" "+refNow:""}`)
         : `This is a computer-generated document issued under Ref#${refNow?" "+refNow:""} and does not require a signature.`;
-      const noteLines=wrapLines(finalNote,timesB,8.2,450);
-      noteLines.forEach((ln,i)=>{
-        drawText(page,timesB,ln,72,783+i*10,8.2,{maxWidth:450});
-      });
+      const noteLines=wrapLines(finalNote,timesI,7.8,450);
+      noteLines.forEach((ln,i)=>drawText(page,timesI,ln,footerX,noteTop+i*10,7.8,{maxWidth:450,color:rgb(0.3,0.3,0.3)}));
+      // The note follows the same name/designation/phone flow in both modes.
+      // The reserved stamp/signature slot above keeps it clear automatically.
+      noteTop+=Math.max(10,noteLines.length*10)+5;
     }
 
-    // Both approved layouts keep the office locations at the same bottom-right
-    // position.
-    const officeLine="Karachi, Islamabad, Faisalabad, Jauharabad, Hatar";
-    drawText(page,timesB,officeLine,350,805,8.5,{maxWidth:200});
+    drawText(page,timesB,officeLine,350,officeTop,8.5,{maxWidth:200});
 
     if(!footerSignOff && !signatureDrawn){
       console.warn("Saved document has no usable signature image; footer spacing was still calculated safely.");
@@ -2671,7 +2691,7 @@ import { getFirestore, doc, getDoc, setDoc, updateDoc, onSnapshot, writeBatch } 
 
 const FIREBASE_CONFIG_KEY="izhar_pavers_firebase_config_v1";
 const CLOUD_SYNC_KEYS=["izhar_pavers_saved_documents_v1","izhar_pavers_recycle_bin_v1","izhar_pavers_materials_v1","izhar_pavers_profile_settings_v1","izhar_pavers_default_terms_v1","izhar_pavers_reference_settings_v1","izhar_pavers_terms_font_size_v1"];
-let cloudApp=null, cloudAuth=null, cloudDb=null, cloudUser=null, syncTimer=null, cloudReady=false, firebaseInitPromise=null, authProcessingUid=null, authorizationLiveUnsubscribe=null, authorizationLiveApplying=false, pendingOwnershipAccess=false;
+let cloudApp=null, cloudAuth=null, cloudDb=null, cloudUser=null, syncTimer=null, cloudReady=false, firebaseInitPromise=null, authProcessingUid=null;
 const BOOTSTRAP_OWNER_EMAIL="talhakhan14746@gmail.com";
 let authorizationConfig={ownerEmail:BOOTSTRAP_OWNER_EMAIL,ownerUid:"",enabled:false,authorizedEmails:[BOOTSTRAP_OWNER_EMAIL],adminEmails:[BOOTSTRAP_OWNER_EMAIL]};
 let authorizationChecked=false;
@@ -2923,104 +2943,31 @@ async function loadAuthorizationConfig(){
   renderAuthorizationUI();
   return authorizationConfig;
 }
-async 
-/*
- * Live authorization enforcement:
- * Firebase Auth keeps a valid session even after an email is removed from
- * appConfig/authorization. Listen to that document in every open session
- * and immediately sign the user out when their access is revoked.
- */
-async function enforceLiveAuthorizationConfig(nextConfig, source="cloud"){
-  if(authorizationLiveApplying) return;
-  const user=cloudUser;
-  if(!user) return;
-
-  const owner=normalizeEmail(nextConfig.ownerEmail||BOOTSTRAP_OWNER_EMAIL);
-  const admins=Array.isArray(nextConfig.adminEmails)
-    ? nextConfig.adminEmails.map(normalizeEmail).filter(Boolean) : [];
-  const authorized=Array.isArray(nextConfig.authorizedEmails)
-    ? nextConfig.authorizedEmails.map(normalizeEmail).filter(Boolean) : [];
-  const email=normalizeEmail(user.email);
-
-  const isOwner=email===owner;
-  const isAdmin=admins.includes(email);
-  const isAuthorized=authorized.includes(email);
-  const allowed=nextConfig.enabled!==true || isOwner || isAdmin || isAuthorized;
-
-  if(allowed) return;
-
-  authorizationLiveApplying=true;
-  try{
-    authorizationChecked=false;
-    cloudReady=false;
-    CLOUD_SYNC_KEYS.forEach(key=>localStorage.removeItem(key));
-    localStorage.removeItem("site_authorization_status");
-    localStorage.removeItem("authorized_users_list");
-    localStorage.removeItem("izhar_pavers_admin_emails_v1");
-    setCloudMessage("Your Gmail authorization was removed. Signing out…");
-    updateCloudUI();
-    try{
-      await signOut(cloudAuth);
-    }catch(e){
-      console.warn("Live authorization sign-out failed:",e);
-    }
-    closeCloudLogin();
-    alert("Your Gmail authorization has been removed.\n\nYou have been signed out of Izhar Pavers.");
-  }finally{
-    authorizationLiveApplying=false;
-  }
-}
-
-function startAuthorizationLiveListener(){
-  if(authorizationLiveUnsubscribe){
-    try{authorizationLiveUnsubscribe();}catch(e){}
-    authorizationLiveUnsubscribe=null;
-  }
-  if(!cloudDb) return;
-  const ref=doc(cloudDb,"appConfig","authorization");
-  authorizationLiveUnsubscribe=onSnapshot(ref,async snap=>{
-    if(!snap.exists()) return;
-    const d=snap.data()||{};
-    const owner=normalizeEmail(d.ownerEmail)||BOOTSTRAP_OWNER_EMAIL;
-    const cfg={
-      ownerEmail:owner,
-      ownerUid:String(d.ownerUid||""),
-      enabled:d.enabled===true,
-      authorizedEmails:Array.isArray(d.authorizedEmails)
-        ? d.authorizedEmails.map(normalizeEmail).filter(Boolean) : [owner],
-      adminEmails:Array.isArray(d.adminEmails)
-        ? d.adminEmails.map(normalizeEmail).filter(Boolean) : [owner],
-      updatedAt:String(d.updatedAt||"")
-    };
-    authorizationConfig=cfg;
-    try{ localStorage.setItem("izhar_pavers_authorization_config_v1",JSON.stringify(cfg)); }catch(e){}
-    mirrorAuthorizationLocalStorage();
-    renderAuthorizationUI();
-    await enforceLiveAuthorizationConfig(cfg,"snapshot");
-  },e=>console.warn("Live authorization listener:",e));
-}
-
 async function checkUserAuthorization(user){
   authorizationChecked=false;
-  pendingOwnershipAccess=false;
   await loadAuthorizationConfig();
   if(!authorizationConfig.enabled){ authorizationChecked=true; return true; }
   const email=normalizeEmail(user?.email);
   const allowed=isAdminAccount(user)||authorizationConfig.authorizedEmails.includes(email);
   if(allowed){ authorizationChecked=true; return true; }
-  if(email && cloudDb){
-    try{
-      const transferSnap=await withTimeout(getDoc(doc(cloudDb,"ownershipTransfers",email)),6000,"Ownership transfer lookup");
-      const transferData=transferSnap.exists() ? (transferSnap.data()||{}) : null;
-      if(transferData && transferData.status==="pending" && normalizeEmail(transferData.toOwnerEmail)===email){
-        pendingOwnershipAccess=true;
-        authorizationChecked=true;
-        return true;
+
+  // A pending ownership-transfer recipient must be allowed to stay signed in
+  // long enough to see and ACCEPT the transfer, even when Authorization is ON.
+  try{
+    if(cloudDb){
+      const transferSnap=await withTimeout(getDoc(doc(cloudDb,"ownershipTransfers",email)),5000,"Ownership request check");
+      if(transferSnap.exists()){
+        const transferData=transferSnap.data()||{};
+        if(transferData.status==="pending" && normalizeEmail(transferData.toOwnerEmail)===email){
+          authorizationChecked=true;
+          return true;
+        }
       }
-    }catch(e){
-      console.warn("Pending ownership transfer lookup failed:",e);
     }
+  }catch(e){
+    console.warn("Pending ownership request check delayed:",e);
   }
+
   authorizationChecked=false;
   try{ CLOUD_SYNC_KEYS.forEach(key=>localStorage.removeItem(key)); await signOut(cloudAuth); }catch(e){}
   updateCloudUI();
@@ -3206,19 +3153,9 @@ window.acceptOwnershipTransfer=async function(){
     localStorage.setItem("izhar_pavers_authorization_config_v1",JSON.stringify(authorizationConfig));
     mirrorAuthorizationLocalStorage();
     pendingOwnershipTransfer=null;
-    pendingOwnershipAccess=false;
     closeOwnershipTransferNotice();
     renderAuthorizationUI();
-    cloudReady=true;
-    updateCloudUI();
     setCloudMessage("You are now the Owner. The previous Owner has been automatically removed.");
-    try{
-      await withTimeout(pullOrMigrateCloudData(),12000,"Cloud data sync after ownership transfer");
-      setCloudMessage("Ownership accepted. You are now the Owner and cloud sync is active.");
-    }catch(syncError){
-      console.warn("Post-transfer cloud sync delayed:",syncError);
-      setCloudMessage("Ownership accepted. Cloud sync will continue when the connection is restored.");
-    }
     alert("Ownership accepted successfully.\n\nYou are now the Owner.");
   }catch(e){
     console.error("Ownership acceptance failed:",e);
@@ -3244,6 +3181,12 @@ function watchOwnershipTransferForUser(user){
   },(e)=>console.warn("Ownership transfer notification listener:",e));
 }
 
+
+// Safety-net click handler for mobile/PWA environments. The inline handler
+// remains the primary path because it preserves the user's click gesture.
+document.addEventListener("click",(event)=>{
+  if(event.target && event.target.id==="continueGoogleBtn" && typeof window.startGoogleLogin==="function") window.startGoogleLogin(event);
+});
 
 // Wire the in-app ownership notification actions.
 document.addEventListener("click",(event)=>{
@@ -3273,9 +3216,6 @@ async function initFirebase(){
       cloudApp=getApps().length?getApps()[0]:initializeApp(cfg);
       cloudAuth=getAuth(cloudApp);
       cloudDb=getFirestore(cloudApp);
-      // Keep every open session synchronized with the central authorization document.
-      // This makes authorization removal take effect immediately without requiring logout/reload.
-      startAuthorizationLiveListener();
       // Memory persistence prevents automatic login after a fresh page/PWA launch.
       // Do NOT call signOut here: doing so can race with Google's popup callback.
       await setPersistence(cloudAuth,browserLocalPersistence);
@@ -3283,30 +3223,71 @@ async function initFirebase(){
         cloudUser=user||null; cloudReady=false; authorizationChecked=false; updateCloudUI(); renderAuthorizationUI();
         watchOwnershipTransferForUser(user);
         if(!user) return;
+        // Authorization is monitored live. If an authorized Gmail is removed
+        // while its session is open, the session is signed out immediately.
+        if(!window.__izharAuthWatchStarted){
+          window.__izharAuthWatchStarted=true;
+          onSnapshot(doc(cloudDb,"appConfig","authorization"), async snap=>{
+            if(!snap.exists() || !cloudUser) return;
+            const d=snap.data()||{};
+            const owner=normalizeEmail(d.ownerEmail);
+            const email=normalizeEmail(cloudUser.email);
+            authorizationConfig={
+              ownerEmail:owner||BOOTSTRAP_OWNER_EMAIL,
+              ownerUid:String(d.ownerUid||""),
+              enabled:d.enabled===true,
+              authorizedEmails:Array.isArray(d.authorizedEmails)?[...new Set([owner,...d.authorizedEmails.map(normalizeEmail).filter(Boolean)])]:[owner],
+              adminEmails:Array.isArray(d.adminEmails)?[...new Set([owner,...d.adminEmails.map(normalizeEmail).filter(Boolean)])]:[owner],
+              updatedAt:String(d.updatedAt||new Date().toISOString())
+            };
+            localStorage.setItem("izhar_pavers_authorization_config_v1",JSON.stringify(authorizationConfig));
+            mirrorAuthorizationLocalStorage();
+            renderAuthorizationUI();
+            if(authorizationConfig.enabled){
+              const allowed=isAdminAccount(cloudUser)||authorizationConfig.authorizedEmails.includes(email);
+              let pendingTransfer=false;
+              if(!allowed){
+                try{
+                  const transferSnap=await getDoc(doc(cloudDb,"ownershipTransfers",email));
+                  if(transferSnap.exists()){
+                    const td=transferSnap.data()||{};
+                    pendingTransfer=td.status==="pending" && normalizeEmail(td.toOwnerEmail)===email;
+                  }
+                }catch(e){
+                  console.warn("Live authorization transfer check:",e);
+                }
+              }
+              if(!allowed && !pendingTransfer){
+                try{ await signOut(cloudAuth); }catch(e){}
+                setCloudMessage("Your authorization was removed. You have been signed out.");
+                alert("Your Gmail authorization has been removed. You have been signed out.");
+              }
+            }
+          },e=>console.warn("Authorization live listener:",e));
+        }
         if(authProcessingUid===user.uid) return;
         authProcessingUid=user.uid;
         try{
           const allowed=await withTimeout(checkUserAuthorization(user),10000,"Authorization check");
           if(allowed){
+            // Authentication is already complete. Mark the account active immediately
+            // so the UI never remains stuck on "Cloud data loading…".
+            cloudReady=true;
+            setCloudMessage("Google account connected. Cloud sync is active.");
+            updateCloudUI();
             closeCloudLogin();
-            if(pendingOwnershipAccess){
-              cloudReady=false;
-              setCloudMessage("Ownership transfer request found. Please accept the request to become the Owner.");
-              updateCloudUI();
-            }else{
-              cloudReady=true;
+
+            // Load/sync cloud data in the background. A slow Firestore connection
+            // must not block the rest of the app.
+            try{
+              await withTimeout(pullOrMigrateCloudData(),12000,"Cloud data sync");
+              await retrySaveAuthorizationConfig();
               setCloudMessage("Google account connected. Cloud sync is active.");
-              updateCloudUI();
-              try{
-                await withTimeout(pullOrMigrateCloudData(),12000,"Cloud data sync");
-                await retrySaveAuthorizationConfig();
-                setCloudMessage("Google account connected. Cloud sync is active.");
-              }catch(syncError){
-                console.warn("Cloud sync delayed:",syncError);
-                setCloudMessage("Google account connected. Cloud sync is temporarily unavailable; your documents can still be generated and will sync when the connection is restored.");
-              }
-              updateCloudUI();
+            }catch(syncError){
+              console.warn("Cloud sync delayed:",syncError);
+              setCloudMessage("Google account connected. Cloud sync is temporarily unavailable; your documents can still be generated and will sync when the connection is restored.");
             }
+            updateCloudUI();
           }
         }catch(e){
           console.error('Cloud sign-in/sync error:',e);
@@ -3325,18 +3306,33 @@ async function initFirebase(){
   return firebaseInitPromise;
 }
 
+// Pre-warm Firebase/Auth as soon as the hosted page is loaded. This is
+// deliberately outside the click handler so Google sign-in remains a direct
+// user gesture on mobile browsers.
+initFirebase().catch(e=>console.warn("Firebase warm-up failed:",e));
+
 async function saveFirebaseConfigAndConnect(){ return startGoogleLogin(); }
 window.saveFirebaseConfigAndConnect=saveFirebaseConfigAndConnect;
 
-async function startGoogleLogin(){
+async function startGoogleLogin(event){
+  if(event && event.preventDefault) event.preventDefault();
   if(location.protocol==='file:' || location.protocol==='content:'){
     setCloudMessage('Please open the hosted Izhar Pavers app to sign in. Install the app from the hosted web address for secure Google Login.');
-    return;
+    return false;
   }
-  const ok=await initFirebase();
-  if(!ok){ openCloudLogin(); setCloudMessage('Firebase could not be initialized. Please open the hosted app and try again.'); return; }
+
+  // IMPORTANT: signInWithPopup must be called directly from the user's click
+  // while the browser still has a user-activation. Firebase is pre-initialized
+  // when the page loads so we do not await initialization here.
+  if(!cloudAuth){
+    setCloudMessage('Secure Google sign-in is still preparing. Please tap Continue with Google once more in a moment.');
+    return false;
+  }
+
   const provider=new GoogleAuthProvider();
   provider.setCustomParameters({prompt:'select_account'});
+  const button=document.getElementById('continueGoogleBtn');
+  if(button) button.disabled=true;
   try{
     setCloudMessage('Opening Google sign-in…');
     await signInWithPopup(cloudAuth,provider);
@@ -3349,7 +3345,10 @@ async function startGoogleLogin(){
     setCloudMessage('Google sign-in could not be completed: '+msg);
     if(code==='auth/popup-blocked') alert('Google sign-in popup was blocked. Please allow pop-ups for this site and try again.');
     else if(code==='auth/cancelled-popup-request') setCloudMessage('Google sign-in was cancelled. Please tap Continue with Google again.');
+  }finally{
+    if(button) button.disabled=false;
   }
+  return false;
 }
 window.startGoogleLogin=startGoogleLogin;
 window.cloudLogout=async function(){
@@ -3357,6 +3356,7 @@ window.cloudLogout=async function(){
   if(!window.confirm("Are you sure you want to logout?")) return;
   try{
     await signOut(cloudAuth);
+    window.__izharAuthWatchStarted=false;
     clearTimeout(syncTimer);
     // Keep local documents/settings on this device. Logging out must NOT make
     // the user's saved quotations disappear from the Documents folder.

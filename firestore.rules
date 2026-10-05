@@ -22,13 +22,19 @@ service cloud.firestore {
       return get(/databases/$(database)/documents/appConfig/authorization);
     }
 
-    // The current Owner is identified by the verified Google email.
-    // ownerUid is retained as additional data, but a stale UID cannot
-    // lock the legitimate Owner out of the transfer-request operation.
+    // The verified Google email is the primary owner identity.
+    // ownerUid is also checked when it is present, but a stale/missing UID
+    // cannot lock the real verified owner out of creating a transfer request.
     function currentOwner() {
       return verifiedEmail()
         && exists(/databases/$(database)/documents/appConfig/authorization)
-        && request.auth.token.email == authDoc().data.ownerEmail;
+        && request.auth.token.email == authDoc().data.ownerEmail
+        && (
+          !('ownerUid' in authDoc().data)
+          || authDoc().data.ownerUid == null
+          || authDoc().data.ownerUid == ''
+          || request.auth.uid == authDoc().data.ownerUid
+        );
     }
 
     function currentAdmin() {
@@ -55,7 +61,7 @@ service cloud.firestore {
 
       allow read: if verifiedEmail();
 
-      // First-time bootstrap.
+      // Initial owner setup.
       allow create: if bootstrapOwner()
         && request.resource.data.ownerEmail == request.auth.token.email
         && request.resource.data.ownerUid == request.auth.uid
@@ -68,15 +74,14 @@ service cloud.firestore {
         && request.resource.data.ownerUid == request.auth.uid
         && validAdminList(request.resource.data);
 
-      // Normal admin changes. Ownership cannot be changed here.
+      // Normal admin changes. Owner identity cannot be changed here.
       allow update: if currentAdmin()
         && validAdminList(request.resource.data)
         && request.resource.data.ownerEmail == resource.data.ownerEmail
         && request.resource.data.ownerUid == resource.data.ownerUid;
 
-      // Ownership ACCEPTANCE. The target account must be the verified
-      // Gmail in the pending request. Both documents are changed in the
-      // same atomic batch, so getAfter() sees the accepted request.
+      // New Owner accepts. The authorization update and transfer-request
+      // update must happen together in the same Firestore batch.
       allow update: if verifiedEmail()
         && request.auth.token.email == request.resource.data.ownerEmail
         && request.resource.data.ownerUid == request.auth.uid
@@ -89,14 +94,17 @@ service cloud.firestore {
         && exists(/databases/$(database)/documents/ownershipTransfers/$(request.auth.token.email))
         && getAfter(/databases/$(database)/documents/ownershipTransfers/$(request.auth.token.email)).data.status == 'accepted'
         && getAfter(/databases/$(database)/documents/ownershipTransfers/$(request.auth.token.email)).data.toOwnerEmail == request.auth.token.email
-        && getAfter(/databases/$(database)/documents/ownershipTransfers/$(request.auth.token.email)).data.fromOwnerEmail == resource.data.ownerEmail;
+        && getAfter(/databases/$(database)/documents/ownershipTransfers/$(request.auth.token.email)).data.fromOwnerEmail == resource.data.ownerEmail
+        && getAfter(/databases/$(database)/documents/ownershipTransfers/$(request.auth.token.email)).data.fromOwnerUid == resource.data.ownerUid;
 
+      // Never delete the authorization document from the client.
       allow delete: if false;
     }
 
     match /ownershipTransfers/{targetEmail} {
 
       // Only the current verified Owner can create a request.
+      // The typed target email is only a destination; it does NOT grant access.
       allow create: if currentOwner()
         && targetEmail == request.resource.data.toOwnerEmail
         && request.resource.data.status == 'pending'
@@ -105,14 +113,14 @@ service cloud.firestore {
         && request.resource.data.toOwnerEmail != request.auth.token.email
         && request.resource.data.toOwnerEmail.matches('^[A-Za-z0-9._%+-]+@gmail\\.com$');
 
-      // Target account or requesting Owner can read the request.
+      // Only the target Gmail or the requesting Owner can see the request.
       allow read: if verifiedEmail()
         && (
           request.auth.token.email == targetEmail
           || request.auth.uid == resource.data.fromOwnerUid
         );
 
-      // Only the target account can accept/reject its request.
+      // Only the target Gmail can accept/reject its pending request.
       allow update: if verifiedEmail()
         && request.auth.token.email == targetEmail
         && resource.data.toOwnerEmail == request.auth.token.email
