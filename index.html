@@ -2482,7 +2482,9 @@ async function generatePDF(openPdf=false, printOnly=false, persist=true){
         const stampW=iw*ratio, stampH=ih*ratio;
         page.drawImage(stampImg,{
           x:242,
-          y:yTop(pageH,638,stampH),
+          // Keep the stamp above the printed designation so "(PAVERS)"
+          // remains completely readable, matching the supplied signed reference.
+          y:yTop(pageH,598,stampH),
           width:stampW,
           height:stampH,
           opacity:0.85
