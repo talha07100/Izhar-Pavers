@@ -54,14 +54,8 @@ textarea{min-height:70px;resize:vertical}
 }
 .items{overflow:auto}
 table{width:100%;border-collapse:collapse;min-width:720px}
-th,td{border:1px solid #ccd2da;padding:8px 11px;vertical-align:middle}
-th{background:#f5f7fa;font-size:13px;white-space:nowrap}
-th:nth-child(5),th:nth-child(6){min-width:105px}
-#rows th:nth-child(5),#rows th:nth-child(6){font-size:11px !important;white-space:nowrap;line-height:1.05}
-#rows th:nth-child(5) .pkr-label,#rows th:nth-child(6) .pkr-label{display:block;font-size:9px !important;font-weight:normal;line-height:1.05;white-space:nowrap}
-#rows td:nth-child(5),#rows td:nth-child(6){padding-left:10px !important;padding-right:10px !important}
-#rows td:nth-child(5) input,#rows td:nth-child(6) input{padding-left:8px !important;padding-right:8px !important}
-.pkr-cell{display:inline-block;padding:0 4px;white-space:nowrap}
+th,td{border:1px solid #ccd2da;padding:7px}
+th{background:#f5f7fa;font-size:13px}
 td input{border:0;padding:5px;border-radius:0}
 #rows td input{
   width:100% !important;
@@ -490,7 +484,7 @@ body:has(.documents-portal.open) .saved-card{display:none}
 <div class="settings-drawer-head"><div style="display:flex;align-items:center;gap:8px"><button aria-label="Back" class="settings-close" id="settingsBackBtn" onclick="handleSettingsBack()" type="button">←</button><h3 id="settingsTitle">Settings</h3></div><button aria-label="Close Settings" class="settings-close" onclick="toggleSettings(false)" type="button">×</button></div>
 <div class="settings-nav" id="settingsNav">
 <button class="settings-nav-btn" id="settingsNavAuthorization" onclick="openSettingsSection('authorizationCard')" style="display:none" type="button">🔐 Authorization</button>
-<button class="settings-nav-btn" id="settingsNavOwnership" onclick="openSettingsSection('ownershipCard')" style="display:none" type="button">👑 Transfer Ownership</button>
+<button class="settings-nav-btn" id="settingsNavOwnership" onclick="openSettingsSection('ownershipCard')" style="display:none" type="button">👑 Admin Ownership</button>
 <button class="settings-nav-btn" onclick="openSettingsSection('referenceSettingsCard')" type="button">🔢 Reference &amp; Serial</button>
 <button class="settings-nav-btn" onclick="openSettingsSection('profileSettingsCard')" type="button">✍️ Profile &amp; Signature</button>
 <button class="settings-nav-btn" onclick="openSettingsSection('materialSettingsCard')" type="button">🧱 Material Library</button>
@@ -498,7 +492,7 @@ body:has(.documents-portal.open) .saved-card{display:none}
 </div>
 <div class="authorization-card" id="authorizationCard" style="display:none">
 <h3 style="margin:0 0 5px">🔐 User Authorization</h3>
-<div class="auth-note">Owner: <strong>talhakhan14747@gmail.com</strong>. Turn authorization ON to allow only Gmail accounts you approve. Turn it OFF to let any Google account use the app.</div>
+<div class="auth-note">Owner: <strong>talhakhan14746@gmail.com</strong>. Turn authorization ON to allow only Gmail accounts you approve. Turn it OFF to let any Google account use the app.</div>
 <div class="authorization-toggle">
 <label for="authorizationEnabled">Require authorization to use this app</label>
 <label class="auth-switch"><input id="authorizationEnabled" onchange="setAuthorizationEnabled(this.checked)" type="checkbox"/><span class="auth-slider"></span></label>
@@ -510,15 +504,18 @@ body:has(.documents-portal.open) .saved-card{display:none}
 <div class="auth-note" style="margin-top:8px">Approved Gmail accounts:</div><div class="auth-list" id="authorizationList"></div>
 </div>
 <div class="ownership-card" id="ownershipCard" style="display:none">
-<h3 style="margin:0 0 5px">👑 Transfer Ownership</h3>
-<div class="auth-note">Enter the Gmail account that should become the new Owner. An ownership request will be sent to that Gmail. Ownership changes only after that account signs in and accepts the request.</div>
-<div class="ownership-row" style="margin-top:10px;display:flex;flex-direction:column;gap:8px">
+<h3 style="margin:0 0 5px">👑 Admin Management</h3>
+<div class="auth-note">Up to <strong>4 Admins</strong> can manage the app. The Owner is permanent and cannot be removed. Only the Owner can add or remove Admins.</div>
+<div class="auth-note" style="margin-top:10px;font-weight:800">Current Admins:</div>
+<div class="auth-list" id="adminList"></div>
+<div class="auth-note" style="margin-top:18px;font-weight:800">Transfer Ownership</div>
+<div class="auth-note" style="margin-top:6px">Enter the Gmail account that should become the new Owner. An ownership request will be sent to that Gmail. Ownership changes only after that account signs in and accepts the request.</div>
+<div class="ownership-row" style="margin-top:8px;display:flex;flex-direction:column;gap:8px">
 <input id="newOwnerEmailInput" placeholder="Enter new Owner Gmail address" type="email"/>
 <button class="btn primary" id="transferOwnershipBtn" onclick="transferAdminOwnership()" type="button">Transfer Ownership</button>
 </div>
-<div class="auth-note" style="margin-top:8px">Only the current Owner can create a transfer request. If an older pending request exists for the same Gmail, it will be safely replaced. The new Owner must sign in with the exact Gmail account and accept the request before ownership changes.</div>
+<div class="auth-note" style="margin-top:8px">Only the current Owner can create a transfer request. The new Owner must sign in with the exact Gmail account and accept the request before ownership changes. Once accepted, the previous Owner is automatically removed.</div>
 </div>
-
 <div id="ownershipTransferNotice" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.58);z-index:99999;align-items:center;justify-content:center;padding:18px">
   <div style="width:min(520px,100%);background:#fff;border-radius:18px;padding:22px;box-shadow:0 20px 60px rgba(0,0,0,.3)">
     <div style="font-size:22px;font-weight:900;margin-bottom:8px">🔔 Ownership Transfer Request</div>
@@ -699,7 +696,7 @@ body:has(.documents-portal.open) .saved-card{display:none}
 <h3>Quotation Items</h3>
 <div class="items">
 <table>
-<thead><tr><th>Sr #</th><th>Description</th><th>UOM</th><th>Qty.</th><th>Rate <span class="pkr-label">(PKR)</span></th><th>Amount <span class="pkr-label">(PKR)</span></th><th></th></tr></thead>
+<thead><tr><th>Sr #</th><th>Description</th><th>UOM</th><th>Qty.</th><th>Rate (PKR)</th><th>Amount (PKR)</th><th></th></tr></thead>
 <tbody id="rows"></tbody>
 </table>
 </div>
@@ -2334,10 +2331,9 @@ async function generatePDF(openPdf=false, printOnly=false, persist=true){
       drawScaledText(timesBI,"Description",109,top+6,getPdfFontSize());
       drawScaledText(timesBI,"UOM",262,top+6,getPdfFontSize());
       drawScaledText(timesBI,"Qty.",306,top+6,getPdfFontSize());
-      drawScaledText(timesBI,"Rate",379,top+6,11,{maxWidth:42});
-      drawScaledText(times,"(PKR)",382,top+18,9,{maxWidth:42});
-      drawScaledText(timesBI,"Amount",432,top+6,11,{maxWidth:82});
-      drawScaledText(times,"(PKR)",452,top+18,9,{maxWidth:42});
+      drawScaledText(timesBI,"Rate",379,top+6,getPdfFontSize());
+      drawScaledText(timesBI,"(PKR)",382,top+18,getPdfFontSize());
+      drawScaledText(timesBI,"Amount (PKR)",432,top+11,getPdfFontSize());
     };
     drawHeader(cursor); cursor+=31;
     let total=0;
@@ -2686,7 +2682,7 @@ import { getFirestore, doc, getDoc, setDoc, updateDoc, onSnapshot, writeBatch } 
 const FIREBASE_CONFIG_KEY="izhar_pavers_firebase_config_v1";
 const CLOUD_SYNC_KEYS=["izhar_pavers_saved_documents_v1","izhar_pavers_recycle_bin_v1","izhar_pavers_materials_v1","izhar_pavers_profile_settings_v1","izhar_pavers_default_terms_v1","izhar_pavers_reference_settings_v1","izhar_pavers_terms_font_size_v1"];
 let cloudApp=null, cloudAuth=null, cloudDb=null, cloudUser=null, syncTimer=null, cloudReady=false, firebaseInitPromise=null, authProcessingUid=null;
-const BOOTSTRAP_OWNER_EMAIL="talhakhan14747@gmail.com";
+const BOOTSTRAP_OWNER_EMAIL="talhakhan14746@gmail.com";
 let authorizationConfig={ownerEmail:BOOTSTRAP_OWNER_EMAIL,ownerUid:"",enabled:false,authorizedEmails:[BOOTSTRAP_OWNER_EMAIL],adminEmails:[BOOTSTRAP_OWNER_EMAIL]};
 let authorizationChecked=false;
 
