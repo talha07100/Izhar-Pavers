@@ -2249,7 +2249,7 @@ async function generatePDF(openPdf=false, printOnly=false, persist=true){
     white(page,70,168,458,141);
     white(page,70,303,458,310);
 
-    const baseX=72, bodyTop=300, bodyBottom=600;
+    const baseX=72, bodyTop=300, bodyBottom=628;
     const rows=[...document.querySelectorAll("#rows tr")];
     const termData=getTermData();
     const paymentEnabled=document.getElementById("paymentEnabled")?.checked && isInvoice();
@@ -2262,49 +2262,145 @@ async function generatePDF(openPdf=false, printOnly=false, persist=true){
     function termFont(item){return (item.bold&&item.italic)?timesBI:(item.bold?timesB:(item.italic?timesI:times));}
 
     function measure(scale){
-      const fs=getPdfFontSize()*scale;
-      let h=31;
+      // Measure in logical PDF units. Scaling is applied only once during drawing.
+      const fs=getPdfFontSize();
+      let h=31; // table header
       rows.forEach(tr=>{
         const desc=clean(tr.querySelector(".desc").value);
         const lines=wrapAt(desc,times,fs,145);
-        const lh=Math.max(11,fs*0.95);
-        h+=Math.max(22,lines.length*lh+6);
+        const rh=Math.max(22, lines.length*14 + 7);
+        h+=rh;
       });
-      h+=22;
+      h+=22; // total row
       if(paymentEnabled){
-        h+=50;
+        h+=50; // payment summary
         if(showPaymentDetails&&paymentData.length){
-        const fs=getPdfFontSize()*scale;
-        const rowLH=Math.max(11,fs*0.95);
+          // Each payment gets a real row with enough room for its own wrapped remark.
+          const paymentGap=15;
+          paymentData.forEach(p=>{
+            const noteText=p.note?"— "+p.note:"";
+            const noteLines=noteText?wrapAt(noteText,times,fs,175):[];
+            h+=Math.max(22, Math.max(1,noteLines.length)*paymentGap+4);
+          });
+          h+=27; // heading + top/bottom padding
+        }
+      }
+      if(termData.length){
+        h+=27;
+        termData.forEach(item=>{
+          const fsTerm=Math.max(7.5,Number(item.fontSize||termBase));
+          const lines=wrapAt(item.text,termFont(item),fsTerm,410);
+          h+=Math.max(14,lines.length*fsTerm*1.25+5);
+        });
+      }
+      return h;
+    }
+
+    const available=bodyBottom-bodyTop;
+    let scale=Math.min(1,available/measure(1));
+    // Normal PDFs remain at the normal font size. Only genuinely long documents compress.
+    scale=Math.max(0.62,scale);
+
+    function T(top){return bodyTop+(top-bodyTop)*scale;}
+    function S(size){return size*scale;}
+    function L(top1,top2){return T(top1),T(top2);}
+    function drawScaledText(font,text,x,top,size,opts={}){
+      const o={...opts};
+      if(o.maxWidth) o.maxWidth=o.maxWidth; // horizontal width stays generous/readable
+      drawText(page,font,text,x,T(top),S(size),o);
+    }
+    function drawScaledLine(x1,top1,x2,top2,w=.6){line(page,x1,T(top1),x2,T(top2),Math.max(.35,w*scale));}
+    function drawScaledRect(x,top,w,h){rect(page,x,T(top),w,h*scale,Math.max(.35,.6*scale));}
+
+    // Fixed header remains untouched; body fields start below it.
+    drawText(page,times,"Ref: "+clean(document.getElementById("ref").value),72,176,getPdfFontSize());
+    const customRef=clean(document.getElementById("customRef")?.value||"");
+    if(customRef) drawText(page,times,"Custom Ref: "+customRef,72,191,getPdfFontSize());
+    drawText(page,times,formatDateForPdf(document.getElementById("date").value),430,176,getPdfFontSize());
+    const customerText="M/s "+clean(document.getElementById("customer").value);
+    drawText(page,timesBI,customerText,72,215,getPdfFontSize());
+    // Clean customer block: no underline under the customer name; keep Site clearly separated.
+    drawText(page,times,"Site: "+clean(document.getElementById("site").value),72,252,getPdfFontSize());
+    drawText(page,timesB,"Subject:",72,271,getPdfFontSize());
+    const subjectText=clean(document.getElementById("subject").value)||"QUOTATION";
+    drawText(page,timesBI,subjectText,145,271,getPdfFontSize());
+    line(page,145,290,145+timesBI.widthOfTextAtSize(subjectText,14),290,1);
+
+    const x0=72,x1=105,x2=256,x3=295,x4=357,x5=425,x6=526;
+    let cursor=bodyTop;
+    const drawHeader=(top)=>{
+      drawScaledRect(x0,top,x6-x0,31);
+      [x1,x2,x3,x4,x5].forEach(x=>drawScaledLine(x,top,x,top+31));
+      drawScaledLine(x0,top+31,x6,top+31);
+      drawScaledText(timesBI,"Sr #",77,top+6,getPdfFontSize());
+      drawScaledText(timesBI,"Description",109,top+6,getPdfFontSize());
+      drawScaledText(timesBI,"UOM",262,top+6,getPdfFontSize());
+      drawScaledText(timesBI,"Qty.",306,top+6,getPdfFontSize());
+      drawScaledText(timesBI,"Rate",379,top+6,getPdfFontSize());
+      drawScaledText(timesBI,"(PKR)",382,top+18,getPdfFontSize());
+      drawScaledText(timesBI,"Amount (PKR)",432,top+11,getPdfFontSize());
+    };
+    drawHeader(cursor); cursor+=31;
+    let total=0;
+    rows.forEach((tr,i)=>{
+      const desc=clean(tr.querySelector(".desc").value),uom=clean(tr.querySelector(".uom").value);
+      const qty=clean(tr.querySelector(".qty").value),rate=clean(tr.querySelector(".rate").value);
+      const amount=num(qty)*num(rate); total+=amount;
+      const lines=wrapAt(desc,times,getPdfFontSize()*scale,145);
+      const descLineGap=Math.max(12,getPdfFontSize()*0.95);
+      const rh=Math.max(22,lines.length*descLineGap+6);
+      // Full row borders, including the outer left/right edges.
+      [x0,x1,x2,x3,x4,x5,x6].forEach(x=>drawScaledLine(x,cursor,x,cursor+rh));
+      drawScaledLine(x0,cursor+rh,x6,cursor+rh);
+      drawScaledText(times,String(i+1).padStart(2,"0")+"-",77,cursor+6,getPdfFontSize());
+      lines.forEach((ln,j)=>drawScaledText(times,ln,109,cursor+5+j*descLineGap,getPdfFontSize(),{maxWidth:145}));
+      drawScaledText(times,uom,262,cursor+6,getPdfFontSize(),{maxWidth:35});
+      drawScaledText(times,qty,304,cursor+6,getPdfFontSize(),{maxWidth:55});
+      drawScaledText(times,rate?String(num(rate)).replace(/\.0+$/,'')+"/no":"",378,cursor+6,getPdfFontSize(),{maxWidth:65});
+      drawScaledText(times,amount?fmt(amount):"",464,cursor+6,getPdfFontSize(),{maxWidth:58});
+      cursor+=rh;
+    });
+    // Total row: full cell border + separator before the amount cell.
+    drawScaledLine(x0,cursor,x6,cursor);
+    drawScaledLine(x0,cursor+22,x6,cursor+22);
+    drawScaledLine(x0,cursor,x0,cursor+22);
+    drawScaledLine(x5,cursor,x5,cursor+22);
+    drawScaledLine(x6,cursor,x6,cursor+22);
+    drawScaledText(timesBI,"Total Amount (PKR)",198,cursor+5,getPdfFontSize());
+    drawScaledText(timesBI,fmt(total),464,cursor+5,getPdfFontSize());
+    cursor+=22;
+
+    if(paymentEnabled){
+      const received=showPaymentDetails?paymentData.reduce((s,p)=>s+p.amount,0):num(document.getElementById("receivedAmount").value);
+      const balance=Math.max(0,grandTotal-received);
+      drawScaledText(timesB,"PAYMENT SUMMARY",82,cursor+5,getPdfFontSize());
+      drawScaledText(timesB,"TOTAL",84,cursor+23,getPdfFontSize()); drawScaledText(timesB,fmt(grandTotal),84,cursor+34,getPdfFontSize(),{maxWidth:125});
+      drawScaledText(timesB,"RECEIVED",254,cursor+23,getPdfFontSize()); drawScaledText(timesB,fmt(received),254,cursor+34,getPdfFontSize(),{maxWidth:125});
+      drawScaledText(timesB,"BALANCE DUE",424,cursor+23,getPdfFontSize(),{maxWidth:95}); drawScaledText(timesB,fmt(balance),424,cursor+34,getPdfFontSize(),{maxWidth:95});
+      cursor+=50;
+      if(showPaymentDetails&&paymentData.length){
+        const fs=getPdfFontSize();
+        const paymentLineGap=15;
         const paymentRows=paymentData.map((p)=>{
           const noteText=p.note?"— "+p.note:"";
-          const noteLines=noteText?wrapAt(noteText,times,fs,145):[];
-          const rowH=Math.max(18,Math.max(1,noteLines.length)*rowLH+5);
+          const noteLines=noteText?wrapAt(noteText,times,fs,175):[];
+          const rowH=Math.max(22,Math.max(1,noteLines.length)*paymentLineGap+4);
           return {p,noteLines,rowH};
         });
-        const paymentBoxH=30+paymentRows.reduce((sum,r)=>sum+r.rowH,0);
+        const paymentBoxH=27+paymentRows.reduce((sum,r)=>sum+r.rowH,0);
         drawScaledRect(82,cursor,418,paymentBoxH);
         drawScaledText(timesB,"PAYMENT DETAILS",90,cursor+7,getPdfFontSize());
-        // Column headings keep the section readable without changing the overall style.
-        drawScaledText(timesBI,"Payment",90,cursor+19,getPdfFontSize()-1,{maxWidth:78});
-        drawScaledText(timesBI,"Amount",180,cursor+19,getPdfFontSize()-1,{maxWidth:65});
-        drawScaledText(timesBI,"Date",255,cursor+19,getPdfFontSize()-1,{maxWidth:70});
-        drawScaledText(timesBI,"Remarks",365,cursor+19,getPdfFontSize()-1,{maxWidth:125});
-        drawScaledLine(82,cursor+27,500,cursor+27,.45);
-        let paymentCursor=cursor+31;
+        let paymentCursor=cursor+21;
         paymentRows.forEach((r,i)=>{
           const {p,noteLines,rowH}=r;
-          const top=paymentCursor/scale;
-          drawScaledText(timesB,`${i+1}${i===0?'st':i===1?'nd':i===2?'rd':'th'} Payment`,90,top,getPdfFontSize(),{maxWidth:78});
-          drawScaledText(times,fmt(p.amount),180,top,getPdfFontSize(),{maxWidth:65});
-          drawScaledText(times,p.date?formatDateForPdf(p.date):"",255,top,getPdfFontSize(),{maxWidth:70});
-          noteLines.forEach((ln,j)=>drawScaledText(times,ln,365,top+(j*rowLH/scale),getPdfFontSize(),{maxWidth:125}));
+          drawScaledText(timesB,`${i+1}${i===0?'st':i===1?'nd':i===2?'rd':'th'} Payment`,90,paymentCursor,getPdfFontSize(),{maxWidth:72});
+          drawScaledText(times,fmt(p.amount),178,paymentCursor,getPdfFontSize(),{maxWidth:72});
+          drawScaledText(times,p.date?formatDateForPdf(p.date):"",258,paymentCursor,getPdfFontSize(),{maxWidth:85});
+          noteLines.forEach((ln,j)=>drawScaledText(times,ln,350,paymentCursor+j*paymentLineGap,getPdfFontSize(),{maxWidth:145}));
           paymentCursor+=rowH;
-          drawScaledLine(82,paymentCursor/scale,500,paymentCursor/scale,.35);
         });
-        cursor+=paymentBoxH+6;
+        cursor+=paymentBoxH+7;
       }
-    }
     }
 
     if(termData.length){
@@ -2355,10 +2451,9 @@ async function generatePDF(openPdf=false, printOnly=false, persist=true){
       // Match the reference's mixed normal/bold company line.
       const companyPrefix="For IZHAR ";
       if(footerCompany==="For IZHAR PAVERS (PVT) LIMITED"){
-        const companyFs=Math.min(getPdfFontSize(),10.5);
-        drawText(page,times,companyPrefix,72,622,companyFs);
-        const prefixW=times.widthOfTextAtSize(companyPrefix,companyFs);
-        drawText(page,timesB,"PAVERS (PVT) LIMITED",72+prefixW,622,companyFs,{maxWidth:330});
+        drawText(page,times,companyPrefix,72,622,getPdfFontSize());
+        const prefixW=times.widthOfTextAtSize(companyPrefix,12);
+        drawText(page,timesB,"PAVERS (PVT) LIMITED",72+prefixW,622,getPdfFontSize());
       }else{
         drawText(page,timesB,footerCompany,72,622,getPdfFontSize(),{maxWidth:330});
       }
@@ -2472,6 +2567,9 @@ async function generatePDF(openPdf=false, printOnly=false, persist=true){
     const out=await pdf.save();
     const blob=new Blob([out],{type:"application/pdf"});
     const pdfUrl=URL.createObjectURL(blob);
+    let binary="";
+    for(let i=0;i<out.length;i+=0x8000){ binary+=String.fromCharCode(...out.subarray(i,Math.min(i+0x8000,out.length))); }
+    const pdfDataUrl="data:application/pdf;base64,"+btoa(binary);
     const customerName=clean(document.getElementById("customer").value);
     const refForFile=clean(document.getElementById("ref").value);
     const safeCustomer=customerName.replace(/[^a-z0-9]+/gi,"_").replace(/^_+|_+$/g,"")||"Party";
@@ -2479,13 +2577,14 @@ async function generatePDF(openPdf=false, printOnly=false, persist=true){
     const fileName="Quotation_"+safeCustomer+"_"+safeRef+".pdf";
     if(printOnly && pdfWindow && !pdfWindow.closed){
       pdfWindow.document.title=(clean(document.getElementById("ref").value)||"Quotation")+" — Print";
-      pdfWindow.location.href=pdfUrl;
+      pdfWindow.location.href=pdfDataUrl;
       setTimeout(()=>{ try{ pdfWindow.focus(); pdfWindow.print(); }catch(e){} },1500);
       status.textContent="PDF opened for printing.";
       setTimeout(()=>URL.revokeObjectURL(pdfUrl),10*60*1000);
     }else if(openPdf && pdfWindow && !pdfWindow.closed){
       pdfWindow.document.title=(clean(document.getElementById("ref").value)||"Quotation")+" — PDF";
-      pdfWindow.location.href=pdfUrl;
+      // Blob URLs can remain blank in some Android/Chrome PDF viewers. Use a data URL for the viewer.
+      pdfWindow.location.href=pdfDataUrl;
       // Same behavior as Folder → Open PDF, plus an automatic download of the same PDF.
       // The PDF viewer opens in the new tab while the download is triggered in the current page.
       setTimeout(()=>{
@@ -2502,8 +2601,10 @@ async function generatePDF(openPdf=false, printOnly=false, persist=true){
       // Keep the object URL alive long enough for mobile PDF viewers/downloads to finish.
       setTimeout(()=>URL.revokeObjectURL(pdfUrl),10*60*1000);
     }else{
-      const a=document.createElement("a"); a.href=pdfUrl;
+      const a=document.createElement("a");
+      a.href=pdfUrl;
       a.download=fileName;
+      a.rel="noopener";
       document.body.appendChild(a);
       a.click();
       a.remove();
