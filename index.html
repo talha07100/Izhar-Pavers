@@ -505,12 +505,6 @@ body:has(.documents-portal.open) .saved-card{display:none}
 <div class="auth-note">Up to <strong>4 Admins</strong> can manage the app. The Owner is permanent and cannot be removed. Only the Owner can add or remove Admins.</div>
 <div class="auth-note" style="margin-top:10px;font-weight:800">Current Admins:</div>
 <div class="auth-list" id="adminList"></div>
-<div class="auth-note" style="margin-top:14px;font-weight:800">Add Admin</div>
-<div class="ownership-row" style="margin-top:8px;display:flex;flex-direction:column;gap:8px">
-<input id="addAdminEmailInput" placeholder="Enter Gmail to add as Admin" type="email"/>
-<button class="btn secondary" id="addAdminBtn" onclick="addAdmin()" type="button">+ Add Admin</button>
-</div>
-<div class="auth-note" style="margin-top:8px">An Admin added here is automatically authorized to use the app.</div>
 <div class="auth-note" style="margin-top:18px;font-weight:800">Transfer Ownership</div>
 <div class="auth-note" style="margin-top:6px">Enter the Gmail account that should become the new Owner. An ownership request will be sent to that Gmail. Ownership changes only after that account signs in and accepts the request.</div>
 <div class="ownership-row" style="margin-top:8px;display:flex;flex-direction:column;gap:8px">
@@ -1088,8 +1082,8 @@ function handleProfileImageUpload(kind,input){
 }
 
 function getTermsFontSize(){
-  const n=parseInt(localStorage.getItem(TERMS_FONT_SIZE_KEY)||"9",10);
-  return Math.min(16,Math.max(7,isFinite(n)?n:9));
+  const n=parseInt(localStorage.getItem(TERMS_FONT_SIZE_KEY)||"14",10);
+  return Math.min(16,Math.max(7,isFinite(n)?n:14));
 }
 function saveTermsFontSize(){
   const el=document.getElementById("termsFontSize");
@@ -1131,7 +1125,7 @@ function normalizeMasterTerm(value){
       highlightColor:String(value.highlightColor||"#fff3a3"),
       bold:!!value.bold,
       italic:!!value.italic,
-      fontSize:Math.min(16,Math.max(7,parseInt(value.fontSize||getTermsFontSize(),10)||9))
+      fontSize:Math.min(16,Math.max(7,parseInt(value.fontSize||getTermsFontSize(),10)||14))
     };
   }
   return {text:String(value||"").trim(),highlight:false,highlightColor:"#fff3a3",bold:false,italic:false,fontSize:getTermsFontSize()};
@@ -2213,6 +2207,9 @@ function validateQuotationBeforeCreate(){
   return true;
 }
 
+const DEFAULT_PDF_FONT_SIZE = 14;
+function getPdfFontSize(){ return DEFAULT_PDF_FONT_SIZE; }
+
 async function generatePDF(openPdf=false, printOnly=false, persist=true){
   if(!validateQuotationBeforeCreate()) return false;
   const subject=(document.getElementById("subject").value||"QUOTATION").toUpperCase();
@@ -2268,9 +2265,9 @@ async function generatePDF(openPdf=false, printOnly=false, persist=true){
       h+=31*scale;
       rows.forEach(tr=>{
         const desc=clean(tr.querySelector(".desc").value);
-        const fsize=9.2*scale;
+        const fsize=getPdfFontSize()*scale;
         const lines=wrapAt(desc,times,fsize,145);
-        const rh=Math.max(22,lines.length*10.5+6)*scale;
+        const rh=Math.max(22,lines.length*(getPdfFontSize()*0.75)+6)*scale;
         h+=rh;
       });
       h+=22*scale; // total row
@@ -2307,18 +2304,18 @@ async function generatePDF(openPdf=false, printOnly=false, persist=true){
     function drawScaledRect(x,top,w,h){rect(page,x,T(top),w,h*scale,Math.max(.35,.6*scale));}
 
     // Fixed header remains untouched; body fields start below it.
-    drawText(page,times,"Ref: "+clean(document.getElementById("ref").value),72,176,11);
+    drawText(page,times,"Ref: "+clean(document.getElementById("ref").value),72,176,getPdfFontSize());
     const customRef=clean(document.getElementById("customRef")?.value||"");
-    if(customRef) drawText(page,times,"Custom Ref: "+customRef,72,191,10);
-    drawText(page,times,formatDateForPdf(document.getElementById("date").value),430,176,11);
+    if(customRef) drawText(page,times,"Custom Ref: "+customRef,72,191,getPdfFontSize());
+    drawText(page,times,formatDateForPdf(document.getElementById("date").value),430,176,getPdfFontSize());
     const customerText="M/s "+clean(document.getElementById("customer").value);
-    drawText(page,timesBI,customerText,72,215,18);
+    drawText(page,timesBI,customerText,72,215,getPdfFontSize());
     const customerWidth=Math.max(20,timesBI.widthOfTextAtSize(customerText,18));
     line(page,72,241,72+Math.min(customerWidth,300),241,1.2);
-    drawText(page,times,"Site: "+clean(document.getElementById("site").value),72,252,11);
-    drawText(page,timesB,"Subject:",72,271,14);
+    drawText(page,times,"Site: "+clean(document.getElementById("site").value),72,252,getPdfFontSize());
+    drawText(page,timesB,"Subject:",72,271,getPdfFontSize());
     const subjectText=clean(document.getElementById("subject").value)||"QUOTATION";
-    drawText(page,timesBI,subjectText,145,271,14);
+    drawText(page,timesBI,subjectText,145,271,getPdfFontSize());
     line(page,145,290,145+timesBI.widthOfTextAtSize(subjectText,14),290,1);
 
     const x0=72,x1=105,x2=256,x3=295,x4=357,x5=425,x6=526;
@@ -2327,13 +2324,13 @@ async function generatePDF(openPdf=false, printOnly=false, persist=true){
       drawScaledRect(x0,top,x6-x0,31);
       [x1,x2,x3,x4,x5].forEach(x=>drawScaledLine(x,top,x,top+31));
       drawScaledLine(x0,top+31,x6,top+31);
-      drawScaledText(timesBI,"Sr #",77,top+6,10);
-      drawScaledText(timesBI,"Description",109,top+6,10);
-      drawScaledText(timesBI,"UOM",262,top+6,10);
-      drawScaledText(timesBI,"Qty.",306,top+6,10);
-      drawScaledText(timesBI,"Rate",379,top+6,10);
-      drawScaledText(timesBI,"(PKR)",382,top+18,10);
-      drawScaledText(timesBI,"Amount (PKR)",432,top+11,10);
+      drawScaledText(timesBI,"Sr #",77,top+6,getPdfFontSize());
+      drawScaledText(timesBI,"Description",109,top+6,getPdfFontSize());
+      drawScaledText(timesBI,"UOM",262,top+6,getPdfFontSize());
+      drawScaledText(timesBI,"Qty.",306,top+6,getPdfFontSize());
+      drawScaledText(timesBI,"Rate",379,top+6,getPdfFontSize());
+      drawScaledText(timesBI,"(PKR)",382,top+18,getPdfFontSize());
+      drawScaledText(timesBI,"Amount (PKR)",432,top+11,getPdfFontSize());
     };
     drawHeader(cursor); cursor+=31;
     let total=0;
@@ -2341,17 +2338,17 @@ async function generatePDF(openPdf=false, printOnly=false, persist=true){
       const desc=clean(tr.querySelector(".desc").value),uom=clean(tr.querySelector(".uom").value);
       const qty=clean(tr.querySelector(".qty").value),rate=clean(tr.querySelector(".rate").value);
       const amount=num(qty)*num(rate); total+=amount;
-      const lines=wrapAt(desc,times,9.2*scale,145);
-      const rh=Math.max(22,lines.length*10.5+6);
+      const lines=wrapAt(desc,times,getPdfFontSize()*scale,145);
+      const rh=Math.max(22,lines.length*(getPdfFontSize()*0.75)+6);
       // Full row borders, including the outer left/right edges.
       [x0,x1,x2,x3,x4,x5,x6].forEach(x=>drawScaledLine(x,cursor,x,cursor+rh));
       drawScaledLine(x0,cursor+rh,x6,cursor+rh);
-      drawScaledText(times,String(i+1).padStart(2,"0")+"-",77,cursor+6,9.2);
-      lines.forEach((ln,j)=>drawScaledText(times,ln,109,cursor+5+j*10.5,9.2,{maxWidth:145}));
-      drawScaledText(times,uom,262,cursor+6,9.2,{maxWidth:35});
-      drawScaledText(times,qty,304,cursor+6,9.2,{maxWidth:55});
-      drawScaledText(times,rate?String(num(rate)).replace(/\.0+$/,'')+"/no":"",378,cursor+6,9.2,{maxWidth:65});
-      drawScaledText(times,amount?fmt(amount):"",464,cursor+6,9.2,{maxWidth:58});
+      drawScaledText(times,String(i+1).padStart(2,"0")+"-",77,cursor+6,getPdfFontSize());
+      lines.forEach((ln,j)=>drawScaledText(times,ln,109,cursor+5+j*10.5,getPdfFontSize(),{maxWidth:145}));
+      drawScaledText(times,uom,262,cursor+6,getPdfFontSize(),{maxWidth:35});
+      drawScaledText(times,qty,304,cursor+6,getPdfFontSize(),{maxWidth:55});
+      drawScaledText(times,rate?String(num(rate)).replace(/\.0+$/,'')+"/no":"",378,cursor+6,getPdfFontSize(),{maxWidth:65});
+      drawScaledText(times,amount?fmt(amount):"",464,cursor+6,getPdfFontSize(),{maxWidth:58});
       cursor+=rh;
     });
     // Total row: full cell border + separator before the amount cell.
@@ -2360,37 +2357,37 @@ async function generatePDF(openPdf=false, printOnly=false, persist=true){
     drawScaledLine(x0,cursor,x0,cursor+22);
     drawScaledLine(x5,cursor,x5,cursor+22);
     drawScaledLine(x6,cursor,x6,cursor+22);
-    drawScaledText(timesBI,"Total Amount (PKR)",198,cursor+5,10);
-    drawScaledText(timesBI,fmt(total),464,cursor+5,10);
+    drawScaledText(timesBI,"Total Amount (PKR)",198,cursor+5,getPdfFontSize());
+    drawScaledText(timesBI,fmt(total),464,cursor+5,getPdfFontSize());
     cursor+=22;
 
     if(paymentEnabled){
       const received=showPaymentDetails?paymentData.reduce((s,p)=>s+p.amount,0):num(document.getElementById("receivedAmount").value);
       const balance=Math.max(0,grandTotal-received);
-      drawScaledText(timesB,"PAYMENT SUMMARY",82,cursor+5,11);
-      drawScaledText(timesB,"TOTAL",84,cursor+23,7.2); drawScaledText(timesB,fmt(grandTotal),84,cursor+34,10);
-      drawScaledText(timesB,"RECEIVED",254,cursor+23,7.2); drawScaledText(timesB,fmt(received),254,cursor+34,10);
-      drawScaledText(timesB,"BALANCE DUE",424,cursor+23,7.2); drawScaledText(timesB,fmt(balance),424,cursor+34,10);
+      drawScaledText(timesB,"PAYMENT SUMMARY",82,cursor+5,getPdfFontSize());
+      drawScaledText(timesB,"TOTAL",84,cursor+23,getPdfFontSize()); drawScaledText(timesB,fmt(grandTotal),84,cursor+34,getPdfFontSize());
+      drawScaledText(timesB,"RECEIVED",254,cursor+23,getPdfFontSize()); drawScaledText(timesB,fmt(received),254,cursor+34,getPdfFontSize());
+      drawScaledText(timesB,"BALANCE DUE",424,cursor+23,getPdfFontSize()); drawScaledText(timesB,fmt(balance),424,cursor+34,getPdfFontSize());
       cursor+=50;
       if(showPaymentDetails&&paymentData.length){
         drawScaledRect(82,cursor,418,24+paymentData.length*11);
-        drawScaledText(timesB,"PAYMENT DETAILS",90,cursor+7,8);
+        drawScaledText(timesB,"PAYMENT DETAILS",90,cursor+7,getPdfFontSize());
         paymentData.forEach((p,i)=>{
           const yy=cursor+18+i*11;
-          drawScaledText(timesB,`${i+1}${i===0?'st':i===1?'nd':i===2?'rd':'th'} Payment`,90,yy,7.2,{maxWidth:62});
-          drawScaledText(times,fmt(p.amount),162,yy,7.2,{maxWidth:55});
-          drawScaledText(times,p.date?formatDateForPdf(p.date):"",222,yy,7.2,{maxWidth:95});
-          if(p.note) drawScaledText(times,"— "+p.note,320,yy,7.2,{maxWidth:175});
+          drawScaledText(timesB,`${i+1}${i===0?'st':i===1?'nd':i===2?'rd':'th'} Payment`,90,yy,getPdfFontSize(),{maxWidth:62});
+          drawScaledText(times,fmt(p.amount),162,yy,getPdfFontSize(),{maxWidth:55});
+          drawScaledText(times,p.date?formatDateForPdf(p.date):"",222,yy,getPdfFontSize(),{maxWidth:95});
+          if(p.note) drawScaledText(times,"— "+p.note,320,yy,getPdfFontSize(),{maxWidth:175});
         });
         cursor+=28+paymentData.length*11;
       }
     }
 
     if(termData.length){
-      drawScaledText(timesB,"TERMS & CONDITIONS",72,cursor+2,15);
+      drawScaledText(timesB,"TERMS & CONDITIONS",72,cursor+2,getPdfFontSize());
       cursor+=26;
       termData.forEach((item)=>{
-        const fs=Math.max(7.5,Number(item.fontSize||termBase));
+        const fs=getPdfFontSize();
         const font=termFont(item);
         const lines=wrapAt(item.text,font,fs*scale,410);
         const lh=fs*1.25;
@@ -2400,8 +2397,8 @@ async function generatePDF(openPdf=false, printOnly=false, persist=true){
           const r=parseInt(hex.slice(1,3),16)/255,g=parseInt(hex.slice(3,5),16)/255,b=parseInt(hex.slice(5,7),16)/255;
           page.drawRectangle({x:104,y:yTop(pageH,T(cursor),h*scale),width:422,height:h*scale-2,color:rgb(r,g,b),opacity:.45});
         }
-        drawScaledText(times,"•",90,cursor,fs);
-        lines.forEach((ln,j)=>drawScaledText(font,ln,108,cursor+j*lh,fs,{maxWidth:410}));
+        drawScaledText(times,"•",90,cursor,getPdfFontSize());
+        lines.forEach((ln,j)=>drawScaledText(font,ln,108,cursor+j*lh,getPdfFontSize(),{maxWidth:410}));
         cursor+=h;
       });
     }
@@ -2429,16 +2426,16 @@ async function generatePDF(openPdf=false, printOnly=false, persist=true){
     // pdf-lib's Times fonts are the closest embedded standard-font match.
     if(!footerSignOff){
       // ===== SIGNATURE ON: approved signed quotation layout =====
-      drawText(page,times,"Yours Truly,",72,608,12);
+      drawText(page,times,"Yours Truly,",72,608,getPdfFontSize());
 
       // Match the reference's mixed normal/bold company line.
       const companyPrefix="For IZHAR ";
       if(footerCompany==="For IZHAR PAVERS (PVT) LIMITED"){
-        drawText(page,times,companyPrefix,72,622,12);
+        drawText(page,times,companyPrefix,72,622,getPdfFontSize());
         const prefixW=times.widthOfTextAtSize(companyPrefix,12);
-        drawText(page,timesB,"PAVERS (PVT) LIMITED",72+prefixW,622,12);
+        drawText(page,timesB,"PAVERS (PVT) LIMITED",72+prefixW,622,getPdfFontSize());
       }else{
-        drawText(page,timesB,footerCompany,72,622,12,{maxWidth:330});
+        drawText(page,timesB,footerCompany,72,622,getPdfFontSize(),{maxWidth:330});
       }
 
       // Signature: reference image box is approximately x=53, top=656,
@@ -2466,9 +2463,9 @@ async function generatePDF(openPdf=false, printOnly=false, persist=true){
       }
 
       // Printed name/designation/phone positions match the signed reference.
-      drawText(page,timesBI,footerName,72,700,17.04,{maxWidth:260});
-      drawText(page,timesI,footerDesignation,72,723,11.04,{maxWidth:300});
-      drawText(page,timesI,footerPhone,72,742,11.04,{maxWidth:180});
+      drawText(page,timesBI,footerName,72,700,getPdfFontSize(),{maxWidth:260});
+      drawText(page,timesI,footerDesignation,72,723,getPdfFontSize(),{maxWidth:300});
+      drawText(page,timesI,footerPhone,72,742,getPdfFontSize(),{maxWidth:180});
 
       // Signed reference keeps the stamp beside the signature.
       try{
@@ -2494,12 +2491,12 @@ async function generatePDF(openPdf=false, printOnly=false, persist=true){
       }
     }else{
       // ===== SIGNATURE OFF: approved computer-generated quotation layout =====
-      drawText(page,times,"Yours Truly,",72,642,11.5);
-      drawText(page,timesB,footerCompany,72,660,11.5,{maxWidth:330});
+      drawText(page,times,"Yours Truly,",72,642,getPdfFontSize());
+      drawText(page,timesB,footerCompany,72,660,getPdfFontSize(),{maxWidth:330});
 
-      drawText(page,timesI,footerName,72,700,15.5,{maxWidth:240});
-      drawText(page,timesI,footerDesignation,72,727,10.5,{maxWidth:300});
-      drawText(page,times,footerPhone,72,749,10.5,{maxWidth:180});
+      drawText(page,timesI,footerName,72,700,getPdfFontSize(),{maxWidth:240});
+      drawText(page,timesI,footerDesignation,72,727,getPdfFontSize(),{maxWidth:300});
+      drawText(page,times,footerPhone,72,749,getPdfFontSize(),{maxWidth:180});
 
       // Stamp moves to the right in the no-sign reference layout.
       try{
@@ -2530,14 +2527,14 @@ async function generatePDF(openPdf=false, printOnly=false, persist=true){
         : `This is a computer-generated document issued under Ref#${refNow?" "+refNow:""} and does not require a signature.`;
       const noteLines=wrapLines(finalNote,timesB,8.2,450);
       noteLines.forEach((ln,i)=>{
-        drawText(page,timesB,ln,72,783+i*10,8.2,{maxWidth:450});
+        drawText(page,timesB,ln,72,783+i*10,getPdfFontSize(),{maxWidth:450});
       });
     }
 
     // Both approved layouts keep the office locations at the same bottom-right
     // position.
     const officeLine="Karachi, Islamabad, Faisalabad, Jauharabad, Hatar";
-    drawText(page,timesB,officeLine,350,805,8.5,{maxWidth:200});
+    drawText(page,timesB,officeLine,350,805,getPdfFontSize(),{maxWidth:200});
 
     if(!footerSignOff && !signatureDrawn){
       console.warn("Saved document has no usable signature image; footer spacing was still calculated safely.");
@@ -2828,7 +2825,6 @@ function renderAuthorizationUI(){
   const menuBtn=document.getElementById("mobileAuthorizationBtn"); if(menuBtn) menuBtn.style.display=isAdmin ? "block" : "none";
   const navAuth=document.getElementById("settingsNavAuthorization"); if(navAuth) navAuth.style.display=isAdmin?"block":"none";
   const navOwner=document.getElementById("settingsNavOwnership"); if(navOwner) navOwner.style.display=isAdmin?"block":"none";
-  const addAdminBtn=document.getElementById("addAdminBtn"); if(addAdminBtn) addAdminBtn.disabled=!isOwner;
   const transferBtn=document.getElementById("transferOwnershipBtn"); if(transferBtn) transferBtn.disabled=!isOwner;
   renderAuthorizationList();
   renderAdminList();
@@ -2977,29 +2973,6 @@ window.removeAuthorizedEmail=async function(email){
   mirrorAuthorizationLocalStorage(); renderAuthorizationUI();
   try{ await saveAuthorizationConfig(); setCloudMessage(email+" authorization removed."); }
   catch(e){ renderAuthorizationUI(); setCloudMessage(email+" removed on this device. Cloud save is pending: "+e.message); }
-};
-window.addAdmin=async function(){
-  if(!isOwnerAccount()){alert("Only the Owner can add or remove Admins.");return;}
-  const input=document.getElementById("addAdminEmailInput");
-  const email=normalizeEmail(input?.value);
-  const admins=getAdminEmails();
-  if(!email){alert("Please enter the Admin Gmail address.");return;}
-  if(!/^[-a-z0-9._%+]+@gmail\.com$/i.test(email)){alert("Please enter a valid Gmail address (example@gmail.com).");return;}
-  if(email===getCurrentOwnerEmail()){alert("This Gmail is already the Owner.");return;}
-  if(admins.includes(email)){alert("This Gmail is already an Admin.");return;}
-  if(admins.length>=4){alert("Maximum 4 Admins are allowed. Remove an Admin first.");return;}
-  const before=[...admins];
-  authorizationConfig.adminEmails=[...admins,email];
-  authorizationConfig.authorizedEmails=[...new Set([...(authorizationConfig.authorizedEmails||[]),email])];
-  try{
-    await saveAuthorizationConfig();
-    if(input)input.value="";
-    setCloudMessage(email+" is now an Admin and has been authorized.");
-  }catch(e){
-    authorizationConfig.adminEmails=before;
-    renderAuthorizationUI();
-    alert("Admin could not be saved: "+(e?.message||e));
-  }
 };
 window.removeAdmin=async function(email){
   email=normalizeEmail(email);
