@@ -2407,15 +2407,14 @@ async function generatePDF(openPdf=false, printOnly=false, persist=true){
     }
 
     // Dynamic document footer / signature block.
-    // IMPORTANT: the footer is rebuilt from the document's frozen profile snapshot.
-    // Clear the entire old template footer first.  The old template contained a
-    // second "Yours Truly" and old signature/stamp, which could otherwise leak
-    // through when a new profile is rendered.
+    // The footer below intentionally follows the two approved reference PDFs:
+    // 1) Signature ON  -> signed layout (signature + stamp beside it).
+    // 2) Signature OFF -> computer-generated layout (stamp on the right +
+    //    computer-generated note).
+    // Keep these coordinates/sizes aligned with the supplied reference PDFs.
     white(page,0,615,pageW,227);
 
-    // Restore the original lower-left navy template accent that belongs to the
-    // page design. The previous footer clear intentionally covered it; keep it
-    // visible while still clearing the old footer text/signature/stamp.
+    // Restore the original lower-left navy template accent.
     page.drawRectangle({x:0,y:0,width:30,height:20,color:rgb(0.02,0.12,0.35)});
 
     const footerName=clean(profile.name)||"TALHA KHAN";
@@ -2424,61 +2423,39 @@ async function generatePDF(openPdf=false, printOnly=false, persist=true){
     const footerCompany=clean(profile.companyLine)||"For IZHAR PAVERS (PVT) LIMITED";
     const footerSignOff=!!profile.computerGeneratedEnabled;
 
-    // Fixed footer layout with dynamic vertical flow.  The signature and stamp
-    // are on the same visual level; all text is given enough clearance so that
-    // nothing can overlap or be clipped.
-    const footerX=72;
-    // No-sign footer is intentionally lower and compact: "Yours Truly" and
-    // the company line sit just above Talha Khan instead of leaving a large gap.
-    const footerTopAnchor=footerSignOff ? 685 : 655;
-    const companyTop=footerTopAnchor+18;
-    const companySize=11.5;
-    const companyMaxWidth=300;
-    const companyLines=wrapLines(footerCompany,timesB,companySize,companyMaxWidth);
-    const companyLineH=companySize*1.2;
-    const companyH=Math.max(companyLineH,companyLines.length*companyLineH);
-
-    drawText(page,times,"Yours Truly,",footerX,footerTopAnchor,11.5);
-    companyLines.forEach((ln,i)=>{
-      drawText(page,timesB,ln,footerX,companyTop+i*companyLineH,companySize,{
-        maxWidth:companyMaxWidth,
-        color:rgb(0.04,0.18,0.41)
-      });
-    });
-
-    // Footer flow is different when the handwritten signature is OFF.
-    // In no-sign mode, keep "Yours Truly" + company line close above the
-    // printed name, with only a small natural gap.  This removes the old
-    // empty signature slot that was creating a large blank space.
-    let currentTop;
-    let signatureSlotTop;
-    const reservedSignatureH=40;
     let signatureDrawn=false;
-    let signatureW=0, signatureH=reservedSignatureH;
 
-    if(footerSignOff){
-      currentTop=companyTop+companyH+6;
-      signatureSlotTop=currentTop;
-    }else{
-      currentTop=companyTop+companyH+8;
-      signatureSlotTop=currentTop;
-    }
-
+    // Reference footer uses Times New Roman-style typography.
+    // pdf-lib's Times fonts are the closest embedded standard-font match.
     if(!footerSignOff){
+      // ===== SIGNATURE ON: approved signed quotation layout =====
+      drawText(page,times,"Yours Truly,",72,608,12);
+
+      // Match the reference's mixed normal/bold company line.
+      const companyPrefix="For IZHAR ";
+      if(footerCompany==="For IZHAR PAVERS (PVT) LIMITED"){
+        drawText(page,times,companyPrefix,72,622,12);
+        const prefixW=times.widthOfTextAtSize(companyPrefix,12);
+        drawText(page,timesB,"PAVERS (PVT) LIMITED",72+prefixW,622,12);
+      }else{
+        drawText(page,timesB,footerCompany,72,622,12,{maxWidth:330});
+      }
+
+      // Signature: reference image box is approximately x=53, top=656,
+      // width=188 and height=65.
       try{
-        const signatureData=await cropTransparentImageData(await cleanSignatureImageData(profile.signatureData||DEFAULT_SIGNATURE_DATA));
-        const sigB64=String(signatureData).split(',')[1]||'';
+        const raw=String(profile.signatureData||DEFAULT_SIGNATURE_DATA);
+        const sigB64=raw.split(',')[1]||'';
         if(sigB64){
           const sigBytes=Uint8Array.from(atob(sigB64),c=>c.charCodeAt(0));
           const sigImg=await pdf.embedPng(sigBytes);
-          const iw=sigImg.width||300, ih=sigImg.height||100;
-          const maxW=205, maxH=40;
+          const iw=sigImg.width||508, ih=sigImg.height||179;
+          const maxW=188, maxH=65;
           const ratio=Math.min(maxW/iw,maxH/ih);
-          signatureW=Math.max(1,iw*ratio);
-          signatureH=Math.min(reservedSignatureH,Math.max(1,ih*ratio));
+          const signatureW=iw*ratio, signatureH=ih*ratio;
           page.drawImage(sigImg,{
-            x:footerX,
-            y:yTop(pageH,signatureSlotTop,signatureH),
+            x:53,
+            y:yTop(pageH,656,signatureH),
             width:signatureW,
             height:signatureH
           });
@@ -2487,77 +2464,78 @@ async function generatePDF(openPdf=false, printOnly=false, persist=true){
       }catch(e){
         console.warn("Document signature render failed:",e);
       }
-    }
 
-    // When signature is OFF there is no reason to reserve a 40pt blank
-    // signature area.  Put the name just below the company line.  When the
-    // signature is ON, retain the existing reserved slot so signed documents
-    // keep their established layout.
-    currentTop=footerSignOff
-      ? signatureSlotTop+7
-      : signatureSlotTop+reservedSignatureH+7;
+      // Printed name/designation/phone positions match the signed reference.
+      drawText(page,timesBI,footerName,72,700,17.04,{maxWidth:260});
+      drawText(page,timesI,footerDesignation,72,723,11.04,{maxWidth:300});
+      drawText(page,timesI,footerPhone,72,742,11.04,{maxWidth:180});
 
-    const nameTop=currentTop;
-    const designationTop=nameTop+17;
-    const phoneTop=designationTop+15;
-    drawText(page,timesB,footerName,footerX,nameTop,9.5,{maxWidth:190});
-    drawText(page,times,footerDesignation,footerX,designationTop,8.5,{maxWidth:195});
-    drawText(page,times,`Cell: ${footerPhone}`,footerX,phoneTop,8.5,{maxWidth:180});
+      // Signed reference keeps the stamp beside the signature.
+      try{
+        const stampData=profile.stampData||DEFAULT_STAMP_DATA;
+        const stampB64=String(stampData).split(',')[1]||'';
+        const stampBytes=Uint8Array.from(atob(stampB64),c=>c.charCodeAt(0));
+        const stampImg=await pdf.embedPng(stampBytes);
+        const iw=stampImg.width||270, ih=stampImg.height||273;
+        const maxW=98, maxH=98;
+        const ratio=Math.min(maxW/iw,maxH/ih);
+        const stampW=iw*ratio, stampH=ih*ratio;
+        page.drawImage(stampImg,{
+          x:242,
+          y:yTop(pageH,638,stampH),
+          width:stampW,
+          height:stampH,
+          opacity:0.85
+        });
+      }catch(e){
+        console.warn("Document stamp render failed:",e);
+      }
+    }else{
+      // ===== SIGNATURE OFF: approved computer-generated quotation layout =====
+      drawText(page,times,"Yours Truly,",72,642,11.5);
+      drawText(page,timesB,footerCompany,72,660,11.5,{maxWidth:330});
 
-    // Keep the stamp beside the signature/name block, not underneath it.
-    // Its right edge stays comfortably inside the page and away from text.
-    const officeLine="Karachi, Islamabad, Faisalabad, Jauharabad, Hatar";
-    // Keep the office locations fully visible and safely inside the page.
-    // In no-sign mode the footer above is compact, so the line can sit slightly
-    // higher instead of being pushed into the viewer's bottom toolbar area.
-    const officeTop=footerSignOff ? 795 : 805;
-    try{
-      const stampData=profile.stampData||DEFAULT_STAMP_DATA;
-      const stampB64=String(stampData).split(',')[1]||'';
-      const stampBytes=Uint8Array.from(atob(stampB64),c=>c.charCodeAt(0));
-      const stampImg=await pdf.embedPng(stampBytes);
-      const iw=stampImg.width||100, ih=stampImg.height||100;
-      const maxStampW=52, maxStampH=footerSignOff ? 52 : 60;
-      const stampRatio=Math.min(maxStampW/iw,maxStampH/ih);
-      const stampW=Math.max(1,iw*stampRatio), stampH=Math.max(1,ih*stampRatio);
+      drawText(page,timesI,footerName,72,700,15.5,{maxWidth:240});
+      drawText(page,timesI,footerDesignation,72,727,10.5,{maxWidth:300});
+      drawText(page,times,footerPhone,72,749,10.5,{maxWidth:180});
 
-      // No-sign mode: place the stamp beside the printed name block, as a
-      // separate clean area.  It must never sit on top of the name, note or
-      // office line.  Signed mode keeps the previous signature-side position.
-      const stampTop=footerSignOff ? companyTop+7 : signatureSlotTop-2;
-      // In no-sign mode, calculate the stamp position from the actual
-      // company-line width so it sits immediately after the full
-      // "For IZHAR PAVERS (PVT) LIMITED" text instead of leaving a large gap.
-      const companyTextWidth = timesB.widthOfTextAtSize(footerCompany, companySize);
-      const noSignStampX = Math.min(footerX + companyTextWidth + 7, 500 - stampW);
-      page.drawImage(stampImg,{
-        x:footerSignOff ? noSignStampX : 205,
-        y:yTop(pageH,stampTop,stampH),
-        width:stampW,
-        height:stampH,
-        opacity:0.85
-      });
-    }catch(e){
-      console.warn("Document stamp render failed:",e);
-    }
+      // Stamp moves to the right in the no-sign reference layout.
+      try{
+        const stampData=profile.stampData||DEFAULT_STAMP_DATA;
+        const stampB64=String(stampData).split(',')[1]||'';
+        const stampBytes=Uint8Array.from(atob(stampB64),c=>c.charCodeAt(0));
+        const stampImg=await pdf.embedPng(stampBytes);
+        const iw=stampImg.width||270, ih=stampImg.height||273;
+        const maxW=92, maxH=92;
+        const ratio=Math.min(maxW/iw,maxH/ih);
+        const stampW=iw*ratio, stampH=ih*ratio;
+        page.drawImage(stampImg,{
+          x:430,
+          y:yTop(pageH,674,stampH),
+          width:stampW,
+          height:stampH,
+          opacity:0.85
+        });
+      }catch(e){
+        console.warn("Document stamp render failed:",e);
+      }
 
-    // Computer-generated note is placed only when signature is OFF.  It has its
-    // own vertical area and can never collide with the stamp or office line.
-    let noteTop=phoneTop+16;
-    if(footerSignOff){
+      // Reference note is below the phone number and uses bold Times.
       const refNow=clean(document.getElementById("ref").value);
       const savedNote=clean(profile.computerGeneratedText);
       const finalNote=savedNote
         ? savedNote.replace(/Ref#(?:\s*)/i,`Ref#${refNow?" "+refNow:""}`)
         : `This is a computer-generated document issued under Ref#${refNow?" "+refNow:""} and does not require a signature.`;
-      const noteLines=wrapLines(finalNote,timesI,7.8,450);
-      noteLines.forEach((ln,i)=>drawText(page,timesI,ln,footerX,noteTop+i*10,7.8,{maxWidth:450,color:rgb(0.3,0.3,0.3)}));
-      // The note follows the same name/designation/phone flow in both modes.
-      // The reserved stamp/signature slot above keeps it clear automatically.
-      noteTop+=Math.max(10,noteLines.length*10)+5;
+      const noteLines=wrapLines(finalNote,timesB,8.2,450);
+      noteLines.forEach((ln,i)=>{
+        drawText(page,timesB,ln,72,783+i*10,8.2,{maxWidth:450});
+      });
     }
 
-    drawText(page,timesB,officeLine,350,officeTop,8.5,{maxWidth:200});
+    // Both approved layouts keep the office locations at the same bottom-right
+    // position.
+    const officeLine="Karachi, Islamabad, Faisalabad, Jauharabad, Hatar";
+    drawText(page,timesB,officeLine,350,805,8.5,{maxWidth:200});
 
     if(!footerSignOff && !signatureDrawn){
       console.warn("Saved document has no usable signature image; footer spacing was still calculated safely.");
