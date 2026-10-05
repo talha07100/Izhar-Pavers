@@ -434,6 +434,9 @@ body:has(.documents-portal.open) .saved-card{display:none}
   #masterTermsEditorList .master-term-toolbar{padding-bottom:1px !important}
 }
 
+
+.footer-note{font-size:9pt;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:15px;text-align:left}
+.footer-cities{font-size:8pt;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:right;margin-top:3px}
 </style>
 </head>
 <body>
@@ -2525,16 +2528,20 @@ async function generatePDF(openPdf=false, printOnly=false, persist=true){
       const finalNote=savedNote
         ? savedNote.replace(/Ref#(?:\s*)/i,`Ref#${refNow?" "+refNow:""}`)
         : `This is a computer-generated document issued under Ref#${refNow?" "+refNow:""} and does not require a signature.`;
-      const noteLines=wrapLines(finalNote,timesB,8.2,450);
-      noteLines.forEach((ln,i)=>{
-        drawText(page,timesB,ln,72,783+i*10,getPdfFontSize(),{maxWidth:450});
-      });
+      // Computer-generated footer note: fixed 9pt and forced to one line.
+      // Keep it separate from the normal 14pt document typography.
+      const footerNoteFontSize=9;
+      drawText(page,timesB,finalNote,72,783,footerNoteFontSize,{maxWidth:470});
     }
 
     // Both approved layouts keep the office locations at the same bottom-right
     // position.
+    // Office/cities footer: fixed 8pt, single line, right aligned.
     const officeLine="Karachi, Islamabad, Faisalabad, Jauharabad, Hatar";
-    drawText(page,timesB,officeLine,350,805,getPdfFontSize(),{maxWidth:200});
+    const officeFontSize=8;
+    const officeWidth=timesB.widthOfTextAtSize(officeLine,officeFontSize);
+    const officeX=Math.max(72,pageW-officeWidth-20);
+    drawText(page,timesB,officeLine,officeX,805,officeFontSize,{maxWidth:officeWidth+1});
 
     if(!footerSignOff && !signatureDrawn){
       console.warn("Saved document has no usable signature image; footer spacing was still calculated safely.");
