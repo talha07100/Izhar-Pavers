@@ -57,10 +57,12 @@ table{width:100%;border-collapse:collapse;min-width:720px}
 th,td{border:1px solid #ccd2da;padding:8px 11px;vertical-align:middle}
 th{background:#f5f7fa;font-size:13px;white-space:nowrap}
 th:nth-child(5),th:nth-child(6){min-width:105px}
+#rows th:nth-child(5),#rows th:nth-child(6){font-size:11px !important;white-space:nowrap;line-height:1.05}
+#rows th:nth-child(5) .pkr-label,#rows th:nth-child(6) .pkr-label{display:block;font-size:9px !important;font-weight:normal;line-height:1.05;white-space:nowrap}
 #rows td:nth-child(5),#rows td:nth-child(6){padding-left:10px !important;padding-right:10px !important}
 #rows td:nth-child(5) input,#rows td:nth-child(6) input{padding-left:8px !important;padding-right:8px !important}
 .pkr-cell{display:inline-block;padding:0 4px;white-space:nowrap}
-td input{border:0;padding:2px;border-radius:0}
+td input{border:0;padding:5px;border-radius:0}
 #rows td input{
   width:100% !important;
   min-width:0 !important;
@@ -697,7 +699,7 @@ body:has(.documents-portal.open) .saved-card{display:none}
 <h3>Quotation Items</h3>
 <div class="items">
 <table>
-<thead><tr><th>Sr #</th><th>Description</th><th>UOM</th><th>Qty.</th><th>Rate (PKR)</th><th>Amount (PKR)</th><th></th></tr></thead>
+<thead><tr><th>Sr #</th><th>Description</th><th>UOM</th><th>Qty.</th><th>Rate <span class="pkr-label">(PKR)</span></th><th>Amount <span class="pkr-label">(PKR)</span></th><th></th></tr></thead>
 <tbody id="rows"></tbody>
 </table>
 </div>
@@ -2332,9 +2334,10 @@ async function generatePDF(openPdf=false, printOnly=false, persist=true){
       drawScaledText(timesBI,"Description",109,top+6,getPdfFontSize());
       drawScaledText(timesBI,"UOM",262,top+6,getPdfFontSize());
       drawScaledText(timesBI,"Qty.",306,top+6,getPdfFontSize());
-      drawScaledText(timesBI,"Rate",379,top+6,getPdfFontSize());
-      drawScaledText(timesBI,"(PKR)",382,top+18,getPdfFontSize());
-      drawScaledText(timesBI,"Amount (PKR)",432,top+11,getPdfFontSize());
+      drawScaledText(timesBI,"Rate",379,top+6,11,{maxWidth:42});
+      drawScaledText(times,"(PKR)",382,top+18,9,{maxWidth:42});
+      drawScaledText(timesBI,"Amount",432,top+6,11,{maxWidth:82});
+      drawScaledText(times,"(PKR)",452,top+18,9,{maxWidth:42});
     };
     drawHeader(cursor); cursor+=31;
     let total=0;
