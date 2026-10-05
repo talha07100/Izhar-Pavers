@@ -2477,14 +2477,14 @@ async function generatePDF(openPdf=false, printOnly=false, persist=true){
         const stampBytes=Uint8Array.from(atob(stampB64),c=>c.charCodeAt(0));
         const stampImg=await pdf.embedPng(stampBytes);
         const iw=stampImg.width||270, ih=stampImg.height||273;
-        const maxW=98, maxH=98;
+        const maxW=80, maxH=80;
         const ratio=Math.min(maxW/iw,maxH/ih);
         const stampW=iw*ratio, stampH=ih*ratio;
         page.drawImage(stampImg,{
-          x:242,
-          // Keep the stamp above the printed designation so "(PAVERS)"
-          // remains completely readable, matching the supplied signed reference.
-          y:yTop(pageH,598,stampH),
+          x:252,
+          // Keep the stamp below the company line and above the designation so
+          // neither "LIMITED" nor "PAVERS" is covered.
+          y:yTop(pageH,640,stampH),
           width:stampW,
           height:stampH,
           opacity:0.85
