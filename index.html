@@ -2262,35 +2262,34 @@ async function generatePDF(openPdf=false, printOnly=false, persist=true){
     function termFont(item){return (item.bold&&item.italic)?timesBI:(item.bold?timesB:(item.italic?timesI:times));}
 
     function measure(scale){
-      const headerH=32*scale;
-      let h=headerH;
-      // table header
-      h+=31*scale;
+      const fs=getPdfFontSize()*scale;
+      let h=31*scale; // table header
       rows.forEach(tr=>{
         const desc=clean(tr.querySelector(".desc").value);
-        const fsize=getPdfFontSize()*scale;
-        const lines=wrapAt(desc,times,fsize,145);
-        const rh=Math.max(22,lines.length*(getPdfFontSize()*1.05)+6)*scale;
+        const lines=wrapAt(desc,times,fs,145);
+        // A row must always be tall enough for every wrapped description line.
+        const rh=Math.max(22, lines.length*Math.max(12,fs*0.95)+6)*scale;
         h+=rh;
       });
       h+=22*scale; // total row
       if(paymentEnabled){
-        h+=52*scale;
+        h+=50*scale; // payment summary
         if(showPaymentDetails&&paymentData.length){
-          const paymentRowsH=paymentData.reduce((sum,p)=>{
+          paymentData.forEach(p=>{
             const noteText=p.note?"— "+p.note:"";
-            const noteLines=noteText?wrapAt(noteText,times,getPdfFontSize()*scale,175):[];
-            return sum+Math.max(18,noteLines.length*(getPdfFontSize()*0.95)+4);
-          },0);
-          h+=(30+paymentRowsH)*scale;
+            const noteLines=noteText?wrapAt(noteText,times,fs,175):[];
+            // Payment rows are measured independently so no payment can overlap the next one.
+            h+=Math.max(18, Math.max(1,noteLines.length)*Math.max(12,fs*0.95)+3)*scale;
+          });
+          h+=26*scale; // payment-details heading/box padding
         }
       }
       if(termData.length){
         h+=26*scale;
         termData.forEach(item=>{
-          const fs=Math.max(7.5,Number(item.fontSize||termBase))*scale;
-          const lines=wrapAt(item.text,termFont(item),fs,410);
-          h+=Math.max(12,lines.length*fs*1.25+4)*scale;
+          const fsTerm=Math.max(7.5,Number(item.fontSize||termBase))*scale;
+          const lines=wrapAt(item.text,termFont(item),fsTerm,410);
+          h+=Math.max(12,lines.length*fsTerm*1.25+4)*scale;
         });
       }
       return h;
@@ -2300,7 +2299,7 @@ async function generatePDF(openPdf=false, printOnly=false, persist=true){
     let scale=Math.min(1,available/measure(1));
     // Keep the document readable. With normal quotations this stays at 100%.
     // For larger documents it compresses spacing/font together rather than creating page 2.
-    scale=Math.max(0.68,scale);
+    scale=Math.max(0.58,scale);
 
     function T(top){return bodyTop+(top-bodyTop)*scale;}
     function S(size){return size*scale;}
@@ -2320,9 +2319,9 @@ async function generatePDF(openPdf=false, printOnly=false, persist=true){
     drawText(page,times,formatDateForPdf(document.getElementById("date").value),430,176,getPdfFontSize());
     const customerText="M/s "+clean(document.getElementById("customer").value);
     drawText(page,timesBI,customerText,72,215,getPdfFontSize());
-    // Customer name is intentionally clean: no underline. Keep Site directly
-    // below the customer name with a small, consistent gap.
-    drawText(page,times,"Site: "+clean(document.getElementById("site").value),72,244,getPdfFontSize());
+    const customerWidth=Math.max(20,timesBI.widthOfTextAtSize(customerText,18));
+    line(page,72,241,72+Math.min(customerWidth,300),241,1.2);
+    drawText(page,times,"Site: "+clean(document.getElementById("site").value),72,252,getPdfFontSize());
     drawText(page,timesB,"Subject:",72,271,getPdfFontSize());
     const subjectText=clean(document.getElementById("subject").value)||"QUOTATION";
     drawText(page,timesBI,subjectText,145,271,getPdfFontSize());
@@ -2338,10 +2337,8 @@ async function generatePDF(openPdf=false, printOnly=false, persist=true){
       drawScaledText(timesBI,"Description",109,top+6,getPdfFontSize());
       drawScaledText(timesBI,"UOM",262,top+6,getPdfFontSize());
       drawScaledText(timesBI,"Qty.",306,top+6,getPdfFontSize());
-      // Keep the two-line Rate header comfortably inside its cell; the
-      // bottom text must not touch the cell border.
-      drawScaledText(timesBI,"Rate",379,top+4,12,{maxWidth:40});
-      drawScaledText(timesBI,"(PKR)",382,top+15,12,{maxWidth:40});
+      drawScaledText(timesBI,"Rate",379,top+6,getPdfFontSize());
+      drawScaledText(timesBI,"(PKR)",382,top+18,getPdfFontSize());
       drawScaledText(timesBI,"Amount (PKR)",432,top+11,getPdfFontSize());
     };
     drawHeader(cursor); cursor+=31;
@@ -2351,12 +2348,13 @@ async function generatePDF(openPdf=false, printOnly=false, persist=true){
       const qty=clean(tr.querySelector(".qty").value),rate=clean(tr.querySelector(".rate").value);
       const amount=num(qty)*num(rate); total+=amount;
       const lines=wrapAt(desc,times,getPdfFontSize()*scale,145);
-      const rh=Math.max(22,lines.length*(getPdfFontSize()*1.05)+6);
+      const descLineGap=Math.max(12,getPdfFontSize()*0.95);
+      const rh=Math.max(22,lines.length*descLineGap+6);
       // Full row borders, including the outer left/right edges.
       [x0,x1,x2,x3,x4,x5,x6].forEach(x=>drawScaledLine(x,cursor,x,cursor+rh));
       drawScaledLine(x0,cursor+rh,x6,cursor+rh);
       drawScaledText(times,String(i+1).padStart(2,"0")+"-",77,cursor+6,getPdfFontSize());
-      lines.forEach((ln,j)=>drawScaledText(times,ln,109,cursor+5+j*(getPdfFontSize()*1.05),getPdfFontSize(),{maxWidth:145}));
+      lines.forEach((ln,j)=>drawScaledText(times,ln,109,cursor+5+j*descLineGap,getPdfFontSize(),{maxWidth:145}));
       drawScaledText(times,uom,262,cursor+6,getPdfFontSize(),{maxWidth:35});
       drawScaledText(times,qty,304,cursor+6,getPdfFontSize(),{maxWidth:55});
       drawScaledText(times,rate?String(num(rate)).replace(/\.0+$/,'')+"/no":"",378,cursor+6,getPdfFontSize(),{maxWidth:65});
@@ -2379,15 +2377,16 @@ async function generatePDF(openPdf=false, printOnly=false, persist=true){
       drawScaledText(timesB,"PAYMENT SUMMARY",82,cursor+5,getPdfFontSize());
       drawScaledText(timesB,"TOTAL",84,cursor+23,getPdfFontSize()); drawScaledText(timesB,fmt(grandTotal),84,cursor+34,getPdfFontSize());
       drawScaledText(timesB,"RECEIVED",254,cursor+23,getPdfFontSize()); drawScaledText(timesB,fmt(received),254,cursor+34,getPdfFontSize());
-      drawScaledText(timesB,"BALANCE",424,cursor+23,getPdfFontSize()); drawScaledText(timesB,fmt(balance),424,cursor+34,getPdfFontSize());
+      drawScaledText(timesB,"BALANCE DUE",424,cursor+23,getPdfFontSize()); drawScaledText(timesB,fmt(balance),424,cursor+34,getPdfFontSize());
       cursor+=50;
       if(showPaymentDetails&&paymentData.length){
-        // Each payment gets a measured row height. Long notes wrap inside their
-        // own row instead of writing over the next payment or the Terms section.
+        const fs=getPdfFontSize();
+        const paymentLineGap=Math.max(12,fs*0.95);
         const paymentRows=paymentData.map((p)=>{
           const noteText=p.note?"— "+p.note:"";
-          const noteLines=noteText?wrapAt(noteText,times,getPdfFontSize()*scale,175):[];
-          return {p,noteLines,rowH:Math.max(18,noteLines.length*(getPdfFontSize()*0.95)+4)};
+          const noteLines=noteText?wrapAt(noteText,times,fs,175):[];
+          const rowH=Math.max(18,Math.max(1,noteLines.length)*paymentLineGap+3);
+          return {p,noteLines,rowH};
         });
         const paymentBoxH=26+paymentRows.reduce((sum,r)=>sum+r.rowH,0);
         drawScaledRect(82,cursor,418,paymentBoxH);
@@ -2398,7 +2397,7 @@ async function generatePDF(openPdf=false, printOnly=false, persist=true){
           drawScaledText(timesB,`${i+1}${i===0?'st':i===1?'nd':i===2?'rd':'th'} Payment`,90,paymentCursor,getPdfFontSize(),{maxWidth:62});
           drawScaledText(times,fmt(p.amount),162,paymentCursor,getPdfFontSize(),{maxWidth:55});
           drawScaledText(times,p.date?formatDateForPdf(p.date):"",222,paymentCursor,getPdfFontSize(),{maxWidth:95});
-          noteLines.forEach((ln,j)=>drawScaledText(times,ln,320,paymentCursor+j*(getPdfFontSize()*0.95),getPdfFontSize(),{maxWidth:175}));
+          noteLines.forEach((ln,j)=>drawScaledText(times,ln,320,paymentCursor+j*paymentLineGap,getPdfFontSize(),{maxWidth:175}));
           paymentCursor+=rowH;
         });
         cursor+=paymentBoxH+4;
@@ -2460,9 +2459,8 @@ async function generatePDF(openPdf=false, printOnly=false, persist=true){
         drawText(page,timesB,footerCompany,72,622,getPdfFontSize(),{maxWidth:330});
       }
 
-      // Signature is kept clearly separated from the company line and
-      // printed name so the handwritten artwork cannot overwrite text.
-      // Keep the same general approved position, but use a compact box.
+      // Signature: reference image box is approximately x=53, top=656,
+      // width=188 and height=65.
       try{
         const raw=String(profile.signatureData||DEFAULT_SIGNATURE_DATA);
         const sigB64=raw.split(',')[1]||'';
@@ -2470,12 +2468,12 @@ async function generatePDF(openPdf=false, printOnly=false, persist=true){
           const sigBytes=Uint8Array.from(atob(sigB64),c=>c.charCodeAt(0));
           const sigImg=await pdf.embedPng(sigBytes);
           const iw=sigImg.width||508, ih=sigImg.height||179;
-          const maxW=188, maxH=52;
+          const maxW=188, maxH=65;
           const ratio=Math.min(maxW/iw,maxH/ih);
           const signatureW=iw*ratio, signatureH=ih*ratio;
           page.drawImage(sigImg,{
             x:53,
-            y:yTop(pageH,654,signatureH),
+            y:yTop(pageH,656,signatureH),
             width:signatureW,
             height:signatureH
           });
@@ -2485,11 +2483,10 @@ async function generatePDF(openPdf=false, printOnly=false, persist=true){
         console.warn("Document signature render failed:",e);
       }
 
-      // Printed identity text starts below the signature artwork; it must
-      // never be painted underneath the signature image.
-      drawText(page,timesBI,footerName,72,716,getPdfFontSize(),{maxWidth:260});
-      drawText(page,timesI,footerDesignation,72,739,getPdfFontSize(),{maxWidth:300});
-      drawText(page,timesI,footerPhone,72,758,getPdfFontSize(),{maxWidth:180});
+      // Printed name/designation/phone positions match the signed reference.
+      drawText(page,timesBI,footerName,72,700,getPdfFontSize(),{maxWidth:260});
+      drawText(page,timesI,footerDesignation,72,723,getPdfFontSize(),{maxWidth:300});
+      drawText(page,timesI,footerPhone,72,742,getPdfFontSize(),{maxWidth:180});
 
       // Signed reference keeps the stamp beside the signature.
       try{
@@ -2559,7 +2556,7 @@ async function generatePDF(openPdf=false, printOnly=false, persist=true){
     // position.
     // Office/cities footer: fixed 8pt, single line, right aligned.
     const officeLine="Karachi, Islamabad, Faisalabad, Jauharabad, Hatar";
-    const officeFontSize=9;
+    const officeFontSize=8;
     const officeWidth=timesB.widthOfTextAtSize(officeLine,officeFontSize);
     const officeX=Math.max(72,pageW-officeWidth-20);
     drawText(page,timesB,officeLine,officeX,805,officeFontSize,{maxWidth:officeWidth+1});
