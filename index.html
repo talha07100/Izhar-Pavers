@@ -2477,36 +2477,45 @@ async function generatePDF(openPdf=false, printOnly=false, persist=true){
     const safeCustomer=customerName.replace(/[^a-z0-9]+/gi,"_").replace(/^_+|_+$/g,"")||"Party";
     const safeRef=refForFile.replace(/[^a-z0-9]+/gi,"_").replace(/^_+|_+$/g,"")||"No_Reference";
     const fileName="Quotation_"+safeCustomer+"_"+safeRef+".pdf";
+    const triggerDownload=()=>{
+      try{
+        const a=document.createElement("a");
+        a.href=pdfUrl;
+        a.download=fileName;
+        a.rel="noopener";
+        a.style.display="none";
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        return true;
+      }catch(err){
+        console.warn("PDF download trigger failed:",err);
+        return false;
+      }
+    };
+
     if(printOnly && pdfWindow && !pdfWindow.closed){
-      pdfWindow.document.title=(clean(document.getElementById("ref").value)||"Quotation")+" — Print";
-      pdfWindow.location.href=pdfUrl;
-      setTimeout(()=>{ try{ pdfWindow.focus(); pdfWindow.print(); }catch(e){} },1500);
+      // Use an embedded PDF viewer first. This is more reliable on Android Chrome
+      // than navigating an about:blank popup directly to a blob URL.
+      pdfWindow.document.open();
+      pdfWindow.document.write(`<!doctype html><html><head><title>${(clean(document.getElementById("ref").value)||"Quotation")} — Print</title><meta name="viewport" content="width=device-width,initial-scale=1"></head><body style="margin:0;overflow:hidden"><iframe src="${pdfUrl}" style="border:0;width:100vw;height:100vh"></iframe></body></html>`);
+      pdfWindow.document.close();
+      setTimeout(()=>{ try{ pdfWindow.focus(); pdfWindow.print(); }catch(e){} },1800);
       status.textContent="PDF opened for printing.";
       setTimeout(()=>URL.revokeObjectURL(pdfUrl),10*60*1000);
     }else if(openPdf && pdfWindow && !pdfWindow.closed){
-      pdfWindow.document.title=(clean(document.getElementById("ref").value)||"Quotation")+" — PDF";
-      pdfWindow.location.href=pdfUrl;
-      // Same behavior as Folder → Open PDF, plus an automatic download of the same PDF.
-      // The PDF viewer opens in the new tab while the download is triggered in the current page.
-      setTimeout(()=>{
-        try{
-          const a=document.createElement("a");
-          a.href=pdfUrl;
-          a.download=fileName;
-          document.body.appendChild(a);
-          a.click();
-          a.remove();
-        }catch(e){}
-      },300);
+      // Android Chrome can leave a blob URL popup on about:blank. Render the PDF
+      // inside the already-open tab instead, while also starting the download.
+      pdfWindow.document.open();
+      pdfWindow.document.write(`<!doctype html><html><head><title>${(clean(document.getElementById("ref").value)||"Quotation")} — PDF</title><meta name="viewport" content="width=device-width,initial-scale=1"></head><body style="margin:0;overflow:hidden"><iframe src="${pdfUrl}" style="border:0;width:100vw;height:100vh"></iframe></body></html>`);
+      pdfWindow.document.close();
+      // Trigger download immediately while still inside the original user action.
+      triggerDownload();
       status.textContent="PDF opened and download started.";
-      // Keep the object URL alive long enough for mobile PDF viewers/downloads to finish.
       setTimeout(()=>URL.revokeObjectURL(pdfUrl),10*60*1000);
     }else{
-      const a=document.createElement("a"); a.href=pdfUrl;
-      a.download=fileName;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
+      // Popup blocked or normal Download PDF: download directly from the blob URL.
+      triggerDownload();
       setTimeout(()=>URL.revokeObjectURL(pdfUrl),60000);
       status.textContent="PDF downloaded successfully (single page).";
     }
