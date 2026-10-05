@@ -435,8 +435,8 @@ body:has(.documents-portal.open) .saved-card{display:none}
 }
 
 
-.footer-note{font-size:9pt;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:15px;text-align:left}
-.footer-cities{font-size:8pt;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:right;margin-top:3px}
+.footer-note{font-size:5pt;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:10px;text-align:left;padding:0;box-sizing:border-box}
+.footer-cities{font-size:4.5pt;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:right;margin-top:2px;padding:0;box-sizing:border-box}
 </style>
 </head>
 <body>
@@ -484,7 +484,7 @@ body:has(.documents-portal.open) .saved-card{display:none}
 <div class="settings-drawer-head"><div style="display:flex;align-items:center;gap:8px"><button aria-label="Back" class="settings-close" id="settingsBackBtn" onclick="handleSettingsBack()" type="button">←</button><h3 id="settingsTitle">Settings</h3></div><button aria-label="Close Settings" class="settings-close" onclick="toggleSettings(false)" type="button">×</button></div>
 <div class="settings-nav" id="settingsNav">
 <button class="settings-nav-btn" id="settingsNavAuthorization" onclick="openSettingsSection('authorizationCard')" style="display:none" type="button">🔐 Authorization</button>
-<button class="settings-nav-btn" id="settingsNavOwnership" onclick="openSettingsSection('ownershipCard')" style="display:none" type="button">👑 Admin Ownership</button>
+<button class="settings-nav-btn" id="settingsNavOwnership" onclick="openSettingsSection('ownershipCard')" style="display:none" type="button">👑 Ownership Transfer</button>
 <button class="settings-nav-btn" onclick="openSettingsSection('referenceSettingsCard')" type="button">🔢 Reference &amp; Serial</button>
 <button class="settings-nav-btn" onclick="openSettingsSection('profileSettingsCard')" type="button">✍️ Profile &amp; Signature</button>
 <button class="settings-nav-btn" onclick="openSettingsSection('materialSettingsCard')" type="button">🧱 Material Library</button>
@@ -492,7 +492,7 @@ body:has(.documents-portal.open) .saved-card{display:none}
 </div>
 <div class="authorization-card" id="authorizationCard" style="display:none">
 <h3 style="margin:0 0 5px">🔐 User Authorization</h3>
-<div class="auth-note">Owner: <strong>talhakhan14746@gmail.com</strong>. Turn authorization ON to allow only Gmail accounts you approve. Turn it OFF to let any Google account use the app.</div>
+<div class="auth-note">Turn authorization ON to allow only Gmail accounts you approve. Turn it OFF to let any Google account use the app.</div>
 <div class="authorization-toggle">
 <label for="authorizationEnabled">Require authorization to use this app</label>
 <label class="auth-switch"><input id="authorizationEnabled" onchange="setAuthorizationEnabled(this.checked)" type="checkbox"/><span class="auth-slider"></span></label>
@@ -504,18 +504,14 @@ body:has(.documents-portal.open) .saved-card{display:none}
 <div class="auth-note" style="margin-top:8px">Approved Gmail accounts:</div><div class="auth-list" id="authorizationList"></div>
 </div>
 <div class="ownership-card" id="ownershipCard" style="display:none">
-<h3 style="margin:0 0 5px">👑 Admin Management</h3>
-<div class="auth-note">Up to <strong>4 Admins</strong> can manage the app. The Owner is permanent and cannot be removed. Only the Owner can add or remove Admins.</div>
-<div class="auth-note" style="margin-top:10px;font-weight:800">Current Admins:</div>
-<div class="auth-list" id="adminList"></div>
-<div class="auth-note" style="margin-top:18px;font-weight:800">Transfer Ownership</div>
-<div class="auth-note" style="margin-top:6px">Enter the Gmail account that should become the new Owner. An ownership request will be sent to that Gmail. Ownership changes only after that account signs in and accepts the request.</div>
+<h3 style="margin:0 0 5px">👑 Transfer Ownership</h3>
+<div class="auth-note">Enter the Gmail account that should become the new Owner. An ownership request will be sent to that Gmail. Ownership changes only after that account signs in and accepts the request.</div>
 <div class="ownership-row" style="margin-top:8px;display:flex;flex-direction:column;gap:8px">
 <input id="newOwnerEmailInput" placeholder="Enter new Owner Gmail address" type="email"/>
 <button class="btn primary" id="transferOwnershipBtn" onclick="transferAdminOwnership()" type="button">Transfer Ownership</button>
 </div>
 <div class="auth-note" style="margin-top:8px">Only the current Owner can create a transfer request. The new Owner must sign in with the exact Gmail account and accept the request before ownership changes. Once accepted, the previous Owner is automatically removed.</div>
-</div>
+</div></div>
 <div id="ownershipTransferNotice" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.58);z-index:99999;align-items:center;justify-content:center;padding:18px">
   <div style="width:min(520px,100%);background:#fff;border-radius:18px;padding:22px;box-shadow:0 20px 60px rgba(0,0,0,.3)">
     <div style="font-size:22px;font-weight:900;margin-bottom:8px">🔔 Ownership Transfer Request</div>
@@ -2528,20 +2524,20 @@ async function generatePDF(openPdf=false, printOnly=false, persist=true){
       const finalNote=savedNote
         ? savedNote.replace(/Ref#(?:\s*)/i,`Ref#${refNow?" "+refNow:""}`)
         : `This is a computer-generated document issued under Ref#${refNow?" "+refNow:""} and does not require a signature.`;
-      // Computer-generated footer note: fixed 9pt and forced to one line.
-      // Keep it separate from the normal 14pt document typography.
-      const footerNoteFontSize=9;
-      drawText(page,timesB,finalNote,72,783,footerNoteFontSize,{maxWidth:470});
+      // Computer-generated footer note: fixed 5pt and forced to one line.
+      // Keep it inside the footer content width, separate from normal document typography.
+      const footerNoteFontSize=5;
+      drawText(page,timesB,finalNote,72,783,footerNoteFontSize,{maxWidth:pageW-122});
     }
 
     // Both approved layouts keep the office locations at the same bottom-right
     // position.
-    // Office/cities footer: fixed 8pt, single line, right aligned.
+    // Office/cities footer: fixed 4.5pt, single line, right aligned and kept inside the page bounds.
     const officeLine="Karachi, Islamabad, Faisalabad, Jauharabad, Hatar";
-    const officeFontSize=8;
+    const officeFontSize=4.5;
     const officeWidth=timesB.widthOfTextAtSize(officeLine,officeFontSize);
     const officeX=Math.max(72,pageW-officeWidth-20);
-    drawText(page,timesB,officeLine,officeX,805,officeFontSize,{maxWidth:officeWidth+1});
+    drawText(page,timesB,officeLine,officeX,805,officeFontSize,{maxWidth:pageW-officeX-20});
 
     if(!footerSignOff && !signatureDrawn){
       console.warn("Saved document has no usable signature image; footer spacing was still calculated safely.");
@@ -2826,7 +2822,6 @@ function renderAuthorizationUI(){
   const isOwner=isOwnerAccount();
   if(card) card.style.display=isAdmin?"block":"none";
   if(ownership) ownership.style.display=isOwner?"block":"none";
-  const ownerLabel=document.querySelector("#authorizationCard .auth-note strong"); if(ownerLabel) ownerLabel.textContent=currentOwner;
   const ownerEmailEl=document.getElementById("currentOwnerEmail"); if(ownerEmailEl) ownerEmailEl.textContent=currentOwner;
   const cb=document.getElementById("authorizationEnabled"); if(cb){ cb.checked=!!authorizationConfig.enabled; cb.disabled=!isOwner; }
   const menuBtn=document.getElementById("mobileAuthorizationBtn"); if(menuBtn) menuBtn.style.display=isAdmin ? "block" : "none";
