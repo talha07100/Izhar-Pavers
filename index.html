@@ -2264,24 +2264,22 @@ async function generatePDF(openPdf=false, printOnly=false, persist=true){
     function measure(scale){
       const headerH=32*scale;
       let h=headerH;
-      // table header
       h+=31*scale;
       rows.forEach(tr=>{
         const desc=clean(tr.querySelector(".desc").value);
-        const fsize=getPdfFontSize()*scale;
-        const lines=wrapAt(desc,times,fsize,145);
-        const rh=Math.max(22,lines.length*(getPdfFontSize()*0.75)+6)*scale;
-        h+=rh;
+        const lines=wrapAt(desc,times,getPdfFontSize(),145);
+        const rh=Math.max(22,lines.length*10.5+8);
+        h+=rh*scale;
       });
-      h+=22*scale; // total row
+      h+=22*scale;
       if(paymentEnabled){
         h+=52*scale;
-        if(showPaymentDetails&&paymentData.length) h+=(28+paymentData.length*14)*scale;
+        if(showPaymentDetails&&paymentData.length) h+=(32+paymentData.length*16)*scale;
       }
       if(termData.length){
         h+=26*scale;
         termData.forEach(item=>{
-          const fs=Math.max(7.5,Number(item.fontSize||termBase))*scale;
+          const fs=Math.max(7.5,Number(item.fontSize||termBase));
           const lines=wrapAt(item.text,termFont(item),fs,410);
           h+=Math.max(12,lines.length*fs*1.25+4)*scale;
         });
@@ -2291,16 +2289,16 @@ async function generatePDF(openPdf=false, printOnly=false, persist=true){
 
     const available=bodyBottom-bodyTop;
     let scale=Math.min(1,available/measure(1));
-    // Keep the document readable. With normal quotations this stays at 100%.
-    // For larger documents it compresses spacing/font together rather than creating page 2.
-    scale=Math.max(0.68,scale);
+    // Normal documents remain exactly at the normal 14pt size. Only when the
+    // complete body would exceed the available page area do we proportionally
+    // reduce the body, preventing any section from writing over another section.
+    scale=Math.max(0.72,scale);
 
     function T(top){return bodyTop+(top-bodyTop)*scale;}
     function S(size){return size*scale;}
-    function L(top1,top2){return T(top1),T(top2);}
     function drawScaledText(font,text,x,top,size,opts={}){
       const o={...opts};
-      if(o.maxWidth) o.maxWidth=o.maxWidth; // horizontal width stays generous/readable
+      if(o.maxWidth) o.maxWidth=o.maxWidth;
       drawText(page,font,text,x,T(top),S(size),o);
     }
     function drawScaledLine(x1,top1,x2,top2,w=.6){line(page,x1,T(top1),x2,T(top2),Math.max(.35,w*scale));}
@@ -2343,13 +2341,16 @@ async function generatePDF(openPdf=false, printOnly=false, persist=true){
       const desc=clean(tr.querySelector(".desc").value),uom=clean(tr.querySelector(".uom").value);
       const qty=clean(tr.querySelector(".qty").value),rate=clean(tr.querySelector(".rate").value);
       const amount=num(qty)*num(rate); total+=amount;
-      const lines=wrapAt(desc,times,getPdfFontSize()*scale,145);
-      const rh=Math.max(22,lines.length*(getPdfFontSize()*0.75)+6);
-      // Full row borders, including the outer left/right edges.
+      // Calculate the row height from the actual wrapped description. This is
+      // critical for details such as "Rectangular 50mm Grey (7000 psi)" so the
+      // second line can never overwrite the row border or Total Amount row.
+      const lines=wrapAt(desc,times,getPdfFontSize(),145);
+      const lineH=10.5;
+      const rh=Math.max(22,lines.length*lineH+8);
       [x0,x1,x2,x3,x4,x5,x6].forEach(x=>drawScaledLine(x,cursor,x,cursor+rh));
       drawScaledLine(x0,cursor+rh,x6,cursor+rh);
       drawScaledText(times,String(i+1).padStart(2,"0")+"-",77,cursor+6,getPdfFontSize());
-      lines.forEach((ln,j)=>drawScaledText(times,ln,109,cursor+5+j*10.5,getPdfFontSize(),{maxWidth:145}));
+      lines.forEach((ln,j)=>drawScaledText(times,ln,109,cursor+5+j*lineH,getPdfFontSize(),{maxWidth:145}));
       drawScaledText(times,uom,262,cursor+6,getPdfFontSize(),{maxWidth:35});
       drawScaledText(times,qty,304,cursor+6,getPdfFontSize(),{maxWidth:55});
       drawScaledText(times,rate?String(num(rate)).replace(/\.0+$/,'')+"/no":"",378,cursor+6,getPdfFontSize(),{maxWidth:65});
@@ -2377,17 +2378,17 @@ async function generatePDF(openPdf=false, printOnly=false, persist=true){
       if(showPaymentDetails&&paymentData.length){
         // Give each payment row its own full line-height so amounts, dates and notes
         // can never overlap vertically when several payments are present.
-        const paymentRowH=14;
-        drawScaledRect(82,cursor,418,26+paymentData.length*paymentRowH);
+        const paymentRowH=16;
+        drawScaledRect(82,cursor,418,28+paymentData.length*paymentRowH);
         drawScaledText(timesB,"PAYMENT DETAILS",90,cursor+7,getPdfFontSize());
         paymentData.forEach((p,i)=>{
-          const yy=cursor+19+i*paymentRowH;
+          const yy=cursor+20+i*paymentRowH;
           drawScaledText(timesB,`${i+1}${i===0?'st':i===1?'nd':i===2?'rd':'th'} Payment`,90,yy,getPdfFontSize(),{maxWidth:62});
           drawScaledText(times,fmt(p.amount),162,yy,getPdfFontSize(),{maxWidth:55});
           drawScaledText(times,p.date?formatDateForPdf(p.date):"",222,yy,getPdfFontSize(),{maxWidth:95});
           if(p.note) drawScaledText(times,"— "+p.note,320,yy,getPdfFontSize(),{maxWidth:175});
         });
-        cursor+=30+paymentData.length*paymentRowH;
+        cursor+=32+paymentData.length*paymentRowH;
       }
     }
 
@@ -2439,11 +2440,13 @@ async function generatePDF(openPdf=false, printOnly=false, persist=true){
       // Match the reference's mixed normal/bold company line.
       const companyPrefix="For IZHAR ";
       if(footerCompany==="For IZHAR PAVERS (PVT) LIMITED"){
-        drawText(page,times,companyPrefix,72,622,getPdfFontSize());
-        const prefixW=times.widthOfTextAtSize(companyPrefix,12);
-        drawText(page,timesB,"PAVERS (PVT) LIMITED",72+prefixW,622,getPdfFontSize());
+        const companySize=Math.min(getPdfFontSize(),330/timesB.widthOfTextAtSize("PAVERS (PVT) LIMITED",getPdfFontSize()));
+        drawText(page,times,companyPrefix,72,622,companySize);
+        const prefixW=times.widthOfTextAtSize(companyPrefix,companySize);
+        drawText(page,timesB,"PAVERS (PVT) LIMITED",72+prefixW,622,companySize,{maxWidth:330-prefixW});
       }else{
-        drawText(page,timesB,footerCompany,72,622,getPdfFontSize(),{maxWidth:330});
+        const companySize=Math.min(getPdfFontSize(),330/timesB.widthOfTextAtSize(footerCompany,getPdfFontSize()));
+        drawText(page,timesB,footerCompany,72,622,companySize,{maxWidth:330});
       }
 
       // Signature is kept clearly separated from the company line and
