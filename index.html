@@ -2280,9 +2280,9 @@ async function generatePDF(openPdf=false, printOnly=false, persist=true){
       h+=31*scale;
       rows.forEach(tr=>{
         const desc=clean(tr.querySelector(".desc").value);
-        const fsize=10.2*scale;
+        const fsize=14*scale;
         const lines=wrapAt(desc,times,fsize,145);
-        const rh=Math.max(22,lines.length*11.6+6)*scale;
+        const rh=Math.max(22,lines.length*16+6)*scale;
         h+=rh;
       });
       h+=22*scale; // total row
@@ -2319,18 +2319,18 @@ async function generatePDF(openPdf=false, printOnly=false, persist=true){
     function drawScaledRect(x,top,w,h){rect(page,x,T(top),w,h*scale,Math.max(.35,.6*scale));}
 
     // Fixed header remains untouched; body fields start below it.
-    drawText(page,times,"Ref: "+clean(document.getElementById("ref").value),72,176,12);
+    drawText(page,times,"Ref: "+clean(document.getElementById("ref").value),72,176,14);
     const customRef=clean(document.getElementById("customRef")?.value||"");
-    if(customRef) drawText(page,times,"Custom Ref: "+customRef,72,191,11);
-    drawText(page,times,formatDateForPdf(document.getElementById("date").value),430,176,12);
+    if(customRef) drawText(page,times,"Custom Ref: "+customRef,72,191,14);
+    drawText(page,times,formatDateForPdf(document.getElementById("date").value),430,176,14);
     const customerText="M/s "+clean(document.getElementById("customer").value);
-    drawText(page,timesBI,customerText,72,215,18);
+    drawText(page,timesBI,customerText,72,215,20);
     const customerWidth=Math.max(20,timesBI.widthOfTextAtSize(customerText,18));
     line(page,72,241,72+Math.min(customerWidth,300),241,1.2);
-    drawText(page,times,"Site: "+clean(document.getElementById("site").value),72,252,12);
-    drawText(page,timesB,"Subject:",72,271,15);
+    drawText(page,times,"Site: "+clean(document.getElementById("site").value),72,252,14);
+    drawText(page,timesB,"Subject:",72,271,14);
     const subjectText=clean(document.getElementById("subject").value)||"QUOTATION";
-    drawText(page,timesBI,subjectText,145,271,15);
+    drawText(page,timesBI,subjectText,145,271,14);
     line(page,145,290,145+timesBI.widthOfTextAtSize(subjectText,15),290,1);
 
     const x0=72,x1=105,x2=256,x3=295,x4=357,x5=425,x6=526;
@@ -2339,13 +2339,13 @@ async function generatePDF(openPdf=false, printOnly=false, persist=true){
       drawScaledRect(x0,top,x6-x0,31);
       [x1,x2,x3,x4,x5].forEach(x=>drawScaledLine(x,top,x,top+31));
       drawScaledLine(x0,top+31,x6,top+31);
-      drawScaledText(timesBI,"Sr #",77,top+6,10.5);
-      drawScaledText(timesBI,"Description",109,top+6,10.5);
-      drawScaledText(timesBI,"UOM",262,top+6,10.5);
-      drawScaledText(timesBI,"Qty.",306,top+6,10.5);
-      drawScaledText(timesBI,"Rate",379,top+6,10.5);
-      drawScaledText(timesBI,"(PKR)",382,top+18,10.5);
-      drawScaledText(timesBI,"Amount (PKR)",432,top+11,10.5);
+      drawScaledText(timesBI,"Sr #",77,top+6,14);
+      drawScaledText(timesBI,"Description",109,top+6,14);
+      drawScaledText(timesBI,"UOM",262,top+6,14);
+      drawScaledText(timesBI,"Qty.",306,top+6,14);
+      drawScaledText(timesBI,"Rate",379,top+6,14);
+      drawScaledText(timesBI,"(PKR)",382,top+18,14);
+      drawScaledText(timesBI,"Amount (PKR)",432,top+11,14);
     };
     drawHeader(cursor); cursor+=31;
     let total=0;
@@ -2353,13 +2353,13 @@ async function generatePDF(openPdf=false, printOnly=false, persist=true){
       const desc=clean(tr.querySelector(".desc").value),uom=clean(tr.querySelector(".uom").value);
       const qty=clean(tr.querySelector(".qty").value),rate=clean(tr.querySelector(".rate").value);
       const amount=num(qty)*num(rate); total+=amount;
-      const lines=wrapAt(desc,times,10.2*scale,145);
-      const rh=Math.max(22,lines.length*11.6+6);
+      const lines=wrapAt(desc,times,14*scale,145);
+      const rh=Math.max(22,lines.length*16+6);
       // Full row borders, including the outer left/right edges.
       [x0,x1,x2,x3,x4,x5,x6].forEach(x=>drawScaledLine(x,cursor,x,cursor+rh));
       drawScaledLine(x0,cursor+rh,x6,cursor+rh);
-      drawScaledText(times,String(i+1).padStart(2,"0")+"-",77,cursor+6,10.2);
-      lines.forEach((ln,j)=>drawScaledText(times,ln,109,cursor+5+j*11.6,10.2,{maxWidth:145}));
+      drawScaledText(times,String(i+1).padStart(2,"0")+"-",77,cursor+6,14);
+      lines.forEach((ln,j)=>drawScaledText(times,ln,109,cursor+5+j*16,10.2,{maxWidth:145}));
       drawScaledText(times,uom,262,cursor+6,10.2,{maxWidth:35});
       drawScaledText(times,qty,304,cursor+6,10.2,{maxWidth:55});
       drawScaledText(times,rate?String(num(rate)).replace(/\.0+$/,'')+"/no":"",378,cursor+6,10.2,{maxWidth:65});
@@ -2372,14 +2372,14 @@ async function generatePDF(openPdf=false, printOnly=false, persist=true){
     drawScaledLine(x0,cursor,x0,cursor+22);
     drawScaledLine(x5,cursor,x5,cursor+22);
     drawScaledLine(x6,cursor,x6,cursor+22);
-    drawScaledText(timesBI,"Total Amount (PKR)",198,cursor+5,11);
-    drawScaledText(timesBI,fmt(total),464,cursor+5,11);
+    drawScaledText(timesBI,"Total Amount (PKR)",198,cursor+5,14);
+    drawScaledText(timesBI,fmt(total),464,cursor+5,14);
     cursor+=22;
 
     if(paymentEnabled){
       const received=showPaymentDetails?paymentData.reduce((s,p)=>s+p.amount,0):num(document.getElementById("receivedAmount").value);
       const balance=Math.max(0,grandTotal-received);
-      drawScaledText(timesB,"PAYMENT SUMMARY",82,cursor+5,11);
+      drawScaledText(timesB,"PAYMENT SUMMARY",82,cursor+5,14);
       drawScaledText(timesB,"TOTAL",84,cursor+23,7.2); drawScaledText(timesB,fmt(grandTotal),84,cursor+34,10);
       drawScaledText(timesB,"RECEIVED",254,cursor+23,7.2); drawScaledText(timesB,fmt(received),254,cursor+34,10);
       drawScaledText(timesB,"BALANCE DUE",424,cursor+23,7.2); drawScaledText(timesB,fmt(balance),424,cursor+34,10);
@@ -2399,7 +2399,7 @@ async function generatePDF(openPdf=false, printOnly=false, persist=true){
     }
 
     if(termData.length){
-      drawScaledText(timesB,"TERMS & CONDITIONS",72,cursor+2,15);
+      drawScaledText(timesB,"TERMS & CONDITIONS",72,cursor+2,14);
       cursor+=26;
       termData.forEach((item)=>{
         const fs=Math.max(8.2,Number(item.fontSize||termBase));
