@@ -1088,14 +1088,14 @@ function handleProfileImageUpload(kind,input){
 }
 
 function getTermsFontSize(){
-  const n=parseInt(localStorage.getItem(TERMS_FONT_SIZE_KEY)||"9",10);
-  return Math.min(16,Math.max(7,isFinite(n)?n:9));
+  const n=parseInt(localStorage.getItem(TERMS_FONT_SIZE_KEY)||"14",10);
+  return Math.min(16,Math.max(7,isFinite(n)?n:14));
 }
 function saveTermsFontSize(){
   const el=document.getElementById("termsFontSize");
   if(!el) return;
   let n=parseInt(el.value,10);
-  if(!isFinite(n)) n=9;
+  if(!isFinite(n)) n=14;
   n=Math.min(16,Math.max(7,n));
   el.value=n;
   localStorage.setItem(TERMS_FONT_SIZE_KEY,String(n));
@@ -2220,6 +2220,7 @@ function validateQuotationBeforeCreate(){
 }
 
 async function generatePDF(openPdf=false, printOnly=false, persist=true){
+  if(persist && typeof window.requireCloudLogin==="function" && !window.requireCloudLogin()) return false;
   if(!validateQuotationBeforeCreate()) return false;
   const subject=(document.getElementById("subject").value||"QUOTATION").toUpperCase();
   // A saved document opened/viewed from the Documents folder is read-only.
@@ -2238,10 +2239,6 @@ async function generatePDF(openPdf=false, printOnly=false, persist=true){
   }
   const status=document.getElementById("status"); status.textContent="Generating PDF…";
   try{
-    if(persist){
-      const saved=saveCurrentDocument(true);
-      if(!saved) return false;
-    }
     const bytes=Uint8Array.from(atob(TEMPLATE_B64),c=>c.charCodeAt(0));
     const pdf=await PDFDocument.load(bytes);
     const page=pdf.getPages()[0];
@@ -2255,47 +2252,43 @@ async function generatePDF(openPdf=false, printOnly=false, persist=true){
     // Signature and stamp are already part of the original template, matching Version 30.
     // Do not redraw them here; this prevents the stray mark beside the signature.
 
-    // The quotation is intentionally ONE PAGE.  Everything below is laid out first,
-    // then vertically fitted to the available area so nothing can overwrite anything.
-    // Cover only editable body areas. Keep the original template header and footer (including clean signature/stamp) visible.
+    // The quotation is intentionally ONE PAGE. Lay out the editable body inside a
+    // reserved area that ends well above the signature/footer. Normal documents use
+    // the requested 14pt text; only unusually long documents are proportionally
+    // fitted so they never collide with the footer.
     white(page,70,168,458,141);
     white(page,70,303,458,310);
 
-    const baseX=72, bodyTop=300, bodyBottom=628;
+    const baseX=72, bodyTop=300, bodyBottom=592;
     const rows=[...document.querySelectorAll("#rows tr")];
     const termData=getTermData();
     const paymentEnabled=document.getElementById("paymentEnabled")?.checked && isInvoice();
     const showPaymentDetails=document.getElementById("showPaymentDetails")?.checked;
     const paymentData=getPaymentData();
     const grandTotal=getGrandTotal();
-    const termBase=getTermsFontSize();
+    const termBase=Math.max(14,getTermsFontSize());
 
     function wrapAt(text,font,size,maxWidth){return wrapLines(text,font,size,maxWidth);}
     function termFont(item){return (item.bold&&item.italic)?timesBI:(item.bold?timesB:(item.italic?timesI:times));}
-
     function measure(scale){
-      const headerH=32*scale;
-      let h=headerH;
-      // table header
-      h+=31*scale;
+      let h=31*scale; // table header
       rows.forEach(tr=>{
         const desc=clean(tr.querySelector(".desc").value);
         const fsize=14*scale;
         const lines=wrapAt(desc,times,fsize,145);
-        const rh=Math.max(26,lines.length*18+8)*scale;
-        h+=rh;
+        h+=Math.max(27,lines.length*18+9)*scale;
       });
-      h+=28*scale; // total row
+      h+=30*scale; // total row
       if(paymentEnabled){
-        h+=52*scale;
-        if(showPaymentDetails&&paymentData.length) h+=(28+paymentData.length*11)*scale;
+        h+=56*scale;
+        if(showPaymentDetails&&paymentData.length) h+=(30+paymentData.length*12)*scale;
       }
       if(termData.length){
-        h+=26*scale;
+        h+=28*scale;
         termData.forEach(item=>{
-          const fs=Math.max(8.2,Number(item.fontSize||termBase))*scale;
+          const fs=Math.max(14,Number(item.fontSize||termBase))*scale;
           const lines=wrapAt(item.text,termFont(item),fs,410);
-          h+=Math.max(12,lines.length*fs*1.25+4)*scale;
+          h+=Math.max(16,lines.length*fs*1.22+6)*scale;
         });
       }
       return h;
@@ -2303,49 +2296,57 @@ async function generatePDF(openPdf=false, printOnly=false, persist=true){
 
     const available=bodyBottom-bodyTop;
     let scale=Math.min(1,available/measure(1));
-    // Keep the document readable. With normal quotations this stays at 100%.
-    // For larger documents it compresses spacing/font together rather than creating page 2.
-    scale=Math.max(0.68,scale);
+    // Never let the main quotation become unreadably tiny. In the rare case that
+    // there is too much content for one page, use the smallest professional scale
+    // and compact spacing rather than letting text overlap the footer.
+    scale=Math.max(0.78,scale);
 
     function T(top){return bodyTop+(top-bodyTop)*scale;}
     function S(size){return size*scale;}
-    function L(top1,top2){return T(top1),T(top2);}
-    function drawScaledText(font,text,x,top,size,opts={}){
-      const o={...opts};
-      if(o.maxWidth) o.maxWidth=o.maxWidth; // horizontal width stays generous/readable
-      drawText(page,font,text,x,T(top),S(size),o);
-    }
+    function drawScaledText(font,text,x,top,size,opts={}){drawText(page,font,text,x,T(top),S(size),opts);}
     function drawScaledLine(x1,top1,x2,top2,w=.6){line(page,x1,T(top1),x2,T(top2),Math.max(.35,w*scale));}
     function drawScaledRect(x,top,w,h){rect(page,x,T(top),w,h*scale,Math.max(.35,.6*scale));}
+    function drawCentered(font,text,left,right,top,size){
+      const value=clean(text);
+      if(!value)return;
+      const width=font.widthOfTextAtSize(value,S(size));
+      const x=left+Math.max(0,(right-left-width)/2);
+      drawScaledText(font,value,x,top,size,{maxWidth:Math.max(1,right-left-4)});
+    }
 
     // Fixed header remains untouched; body fields start below it.
     drawText(page,times,"Ref: "+clean(document.getElementById("ref").value),72,176,14);
     const customRef=clean(document.getElementById("customRef")?.value||"");
     if(customRef) drawText(page,times,"Custom Ref: "+customRef,72,191,14);
-    drawText(page,times,formatDateForPdf(document.getElementById("date").value),430,176,14);
+    const dateText=formatDateForPdf(document.getElementById("date").value);
+    const dateWidth=times.widthOfTextAtSize(dateText,14);
+    drawText(page,times,dateText,526-Math.min(dateWidth,96),176,14,{maxWidth:96});
     const customerText="M/s "+clean(document.getElementById("customer").value);
-    drawText(page,timesBI,customerText,72,215,20);
-    const customerWidth=Math.max(20,timesBI.widthOfTextAtSize(customerText,18));
-    line(page,72,241,72+Math.min(customerWidth,300),241,1.2);
-    drawText(page,times,"Site: "+clean(document.getElementById("site").value),72,252,14);
+    drawText(page,timesBI,customerText,72,215,20,{maxWidth:360});
+    const customerWidth=Math.max(20,Math.min(300,timesBI.widthOfTextAtSize(customerText,18)));
+    line(page,72,241,72+customerWidth,241,1.2);
+    drawText(page,times,"Site: "+clean(document.getElementById("site").value),72,252,14,{maxWidth:350});
     drawText(page,timesB,"Subject:",72,271,14);
     const subjectText=clean(document.getElementById("subject").value)||"QUOTATION";
-    drawText(page,timesBI,subjectText,145,271,14);
-    line(page,145,290,145+timesBI.widthOfTextAtSize(subjectText,15),290,1);
+    drawText(page,timesBI,subjectText,145,271,14,{maxWidth:330});
+    line(page,145,290,145+Math.min(330,timesBI.widthOfTextAtSize(subjectText,15)),290,1);
 
+    // Balanced column widths. The Rate cell is deliberately wide enough for both
+    // "Rate" + "(PKR)" and the numeric value at 14pt; all centered cells are truly
+    // centered between their borders so text can never cross into the next cell.
     const x0=72,x1=105,x2=256,x3=295,x4=357,x5=425,x6=526;
     let cursor=bodyTop;
     const drawHeader=(top)=>{
       drawScaledRect(x0,top,x6-x0,31);
       [x1,x2,x3,x4,x5].forEach(x=>drawScaledLine(x,top,x,top+31));
       drawScaledLine(x0,top+31,x6,top+31);
-      drawScaledText(timesBI,"Sr #",77,top+6,14);
-      drawScaledText(timesBI,"Description",109,top+6,14);
-      drawScaledText(timesBI,"UOM",262,top+6,14);
-      drawScaledText(timesBI,"Qty.",306,top+6,14);
-      drawScaledText(timesBI,"Rate",374,top+4,14,{maxWidth:65});
-      drawScaledText(timesBI,"(PKR)",376,top+18,14,{maxWidth:65});
-      drawScaledText(timesBI,"Amount (PKR)",430,top+10,14,{maxWidth:94});
+      drawCentered(timesBI,"Sr #",x0,x1,top+6,14);
+      drawScaledText(timesBI,"Description",109,top+6,14,{maxWidth:142});
+      drawCentered(timesBI,"UOM",x2,x3,top+6,14);
+      drawCentered(timesBI,"Qty.",x3,x4,top+6,14);
+      drawCentered(timesBI,"Rate",x4,x5,top+3,14);
+      drawCentered(timesBI,"(PKR)",x4,x5,top+18,14);
+      drawCentered(timesBI,"Amount (PKR)",x5,x6,top+10,14);
     };
     drawHeader(cursor); cursor+=31;
     let total=0;
@@ -2354,60 +2355,58 @@ async function generatePDF(openPdf=false, printOnly=false, persist=true){
       const qty=clean(tr.querySelector(".qty").value),rate=clean(tr.querySelector(".rate").value);
       const amount=num(qty)*num(rate); total+=amount;
       const lines=wrapAt(desc,times,14*scale,145);
-      const rh=Math.max(26,lines.length*18+8);
-      // Full row borders, including the outer left/right edges.
+      const rh=Math.max(27,lines.length*18+9);
       [x0,x1,x2,x3,x4,x5,x6].forEach(x=>drawScaledLine(x,cursor,x,cursor+rh));
       drawScaledLine(x0,cursor+rh,x6,cursor+rh);
-      drawScaledText(times,String(i+1).padStart(2,"0")+"-",77,cursor+5,14);
+      drawCentered(times,String(i+1).padStart(2,"0")+"-",x0,x1,cursor+5,14);
       lines.forEach((ln,j)=>drawScaledText(times,ln,109,cursor+4+j*18,14,{maxWidth:145}));
-      drawScaledText(times,uom,262,cursor+4,14,{maxWidth:35});
-      drawScaledText(times,qty,304,cursor+4,14,{maxWidth:55});
+      drawCentered(times,uom,x2,x3,cursor+4,14);
+      drawCentered(times,qty,x3,x4,cursor+4,14);
       const rateText=rate?String(num(rate)).replace(/\.0+$/,'')+"/no":"";
-      drawScaledText(times,rateText,378,cursor+4,14,{maxWidth:65});
-      drawScaledText(times,amount?fmt(amount):"",464,cursor+4,14,{maxWidth:58});
+      drawCentered(times,rateText,x4,x5,cursor+4,14);
+      drawCentered(times,amount?fmt(amount):"",x5,x6,cursor+4,14);
       cursor+=rh;
     });
-    // Total row: full cell border + separator before the amount cell.
     drawScaledLine(x0,cursor,x6,cursor);
-    drawScaledLine(x0,cursor+28,x6,cursor+28);
-    drawScaledLine(x0,cursor,x0,cursor+28);
-    drawScaledLine(x5,cursor,x5,cursor+28);
-    drawScaledLine(x6,cursor,x6,cursor+28);
-    drawScaledText(timesBI,"Total Amount (PKR)",198,cursor+6,14);
-    drawScaledText(timesBI,fmt(total),464,cursor+6,14);
-    cursor+=28;
+    drawScaledLine(x0,cursor+30,x6,cursor+30);
+    drawScaledLine(x0,cursor,x0,cursor+30);
+    drawScaledLine(x5,cursor,x5,cursor+30);
+    drawScaledLine(x6,cursor,x6,cursor+30);
+    drawScaledText(timesBI,"Total Amount (PKR)",198,cursor+6,14,{maxWidth:225});
+    drawCentered(timesBI,fmt(total),x5,x6,cursor+6,14);
+    cursor+=30;
 
     if(paymentEnabled){
       const received=showPaymentDetails?paymentData.reduce((s,p)=>s+p.amount,0):num(document.getElementById("receivedAmount").value);
       const balance=Math.max(0,grandTotal-received);
       drawScaledText(timesB,"PAYMENT SUMMARY",82,cursor+5,14);
-      drawScaledText(timesB,"TOTAL",84,cursor+23,7.2); drawScaledText(timesB,fmt(grandTotal),84,cursor+34,10);
-      drawScaledText(timesB,"RECEIVED",254,cursor+23,7.2); drawScaledText(timesB,fmt(received),254,cursor+34,10);
-      drawScaledText(timesB,"BALANCE DUE",424,cursor+23,7.2); drawScaledText(timesB,fmt(balance),424,cursor+34,10);
-      cursor+=50;
+      drawScaledText(timesB,"TOTAL",84,cursor+23,14); drawScaledText(times,fmt(grandTotal),84,cursor+39,14);
+      drawScaledText(timesB,"RECEIVED",254,cursor+23,14); drawScaledText(times,fmt(received),254,cursor+39,14);
+      drawScaledText(timesB,"BALANCE DUE",424,cursor+23,14); drawScaledText(times,fmt(balance),424,cursor+39,14);
+      cursor+=56;
       if(showPaymentDetails&&paymentData.length){
-        drawScaledRect(82,cursor,418,24+paymentData.length*11);
-        drawScaledText(timesB,"PAYMENT DETAILS",90,cursor+7,8);
+        drawScaledRect(82,cursor,418,30+paymentData.length*12);
+        drawScaledText(timesB,"PAYMENT DETAILS",90,cursor+7,14);
         paymentData.forEach((p,i)=>{
-          const yy=cursor+18+i*11;
-          drawScaledText(timesB,`${i+1}${i===0?'st':i===1?'nd':i===2?'rd':'th'} Payment`,90,yy,7.2,{maxWidth:62});
-          drawScaledText(times,fmt(p.amount),162,yy,7.2,{maxWidth:55});
-          drawScaledText(times,p.date?formatDateForPdf(p.date):"",222,yy,7.2,{maxWidth:95});
-          if(p.note) drawScaledText(times,"— "+p.note,320,yy,7.2,{maxWidth:175});
+          const yy=cursor+22+i*12;
+          drawScaledText(timesB,`${i+1}${i===0?'st':i===1?'nd':i===2?'rd':'th'} Payment`,90,yy,14,{maxWidth:85});
+          drawScaledText(times,fmt(p.amount),180,yy,14,{maxWidth:65});
+          drawScaledText(times,p.date?formatDateForPdf(p.date):"",250,yy,14,{maxWidth:85});
+          if(p.note) drawScaledText(times,"— "+p.note,340,yy,14,{maxWidth:155});
         });
-        cursor+=28+paymentData.length*11;
+        cursor+=30+paymentData.length*12;
       }
     }
 
     if(termData.length){
       drawScaledText(timesB,"TERMS & CONDITIONS",72,cursor+2,14);
-      cursor+=26;
+      cursor+=28;
       termData.forEach((item)=>{
-        const fs=Math.max(8.2,Number(item.fontSize||termBase));
+        const fs=Math.max(14,Number(item.fontSize||termBase));
         const font=termFont(item);
         const lines=wrapAt(item.text,font,fs*scale,410);
-        const lh=fs*1.25;
-        const h=Math.max(12,lines.length*lh+4);
+        const lh=fs*1.22;
+        const h=Math.max(16,lines.length*lh+6);
         if(item.highlight){
           const hex=item.highlightColor||"#fff3a3";
           const r=parseInt(hex.slice(1,3),16)/255,g=parseInt(hex.slice(3,5),16)/255,b=parseInt(hex.slice(5,7),16)/255;
@@ -3194,8 +3193,18 @@ function watchOwnershipTransferForUser(user){
     if(!snap.exists()){pendingOwnershipTransfer=null;closeOwnershipTransferNotice();return;}
     const d=snap.data()||{};
     if((d.status==="pending" || d.status==="accepted") && normalizeEmail(d.toOwnerEmail)===email){
-      showOwnershipTransferNotice(d);
-      if(d.status==="accepted") finalizeAcceptedOwnershipTransfer(d).then(ok=>{ if(ok){ pendingOwnershipTransfer=null; closeOwnershipTransferNotice(); renderAuthorizationUI(); setCloudMessage("Ownership transfer completed successfully. You are now the Owner."); } }).catch(e=>console.warn("Accepted ownership finalization retry:",e));
+      // IMPORTANT: Never finalize ownership automatically from the snapshot listener.
+      // The target Owner must explicitly press ACCEPT OWNERSHIP. If a previous accept
+      // marked the request as accepted but the authorization write failed, the same
+      // button remains available and finalizeAcceptedOwnershipTransfer() can safely retry.
+      // Once the authorization document confirms this account is already Owner, the
+      // old accepted request is simply closed instead of reopening the notice.
+      if(d.status==="accepted" && isOwnerAccount(user)){
+        pendingOwnershipTransfer=null;
+        closeOwnershipTransferNotice();
+      }else{
+        showOwnershipTransferNotice(d);
+      }
     }
     else{pendingOwnershipTransfer=null;closeOwnershipTransferNotice();}
   },(e)=>console.warn("Ownership transfer notification listener:",e));
