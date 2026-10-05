@@ -2309,9 +2309,16 @@ async function generatePDF(openPdf=false, printOnly=false, persist=true){
     function drawCentered(font,text,left,right,top,size){
       const value=clean(text);
       if(!value)return;
-      const width=font.widthOfTextAtSize(value,S(size));
-      const x=left+Math.max(0,(right-left-width)/2);
-      drawScaledText(font,value,x,top,size,{maxWidth:Math.max(1,right-left-4)});
+      // Always calculate the final fitted font size BEFORE calculating x.
+      // This prevents pdf-lib's maxWidth scaling from shifting text outside
+      // a narrow cell (the previous implementation centered at the old width).
+      const available=Math.max(8,right-left-8);
+      let fitted=S(size);
+      const natural=font.widthOfTextAtSize(value,fitted);
+      if(natural>available) fitted=Math.max(7,natural ? fitted*(available/natural) : fitted);
+      const finalWidth=font.widthOfTextAtSize(value,fitted);
+      const x=left+Math.max(0,(right-left-finalWidth)/2);
+      drawText(page,font,value,x,T(top),fitted,{maxWidth:available});
     }
 
     // Fixed header remains untouched; body fields start below it.
@@ -2334,14 +2341,14 @@ async function generatePDF(openPdf=false, printOnly=false, persist=true){
     // Balanced column widths. The Rate cell is deliberately wide enough for both
     // "Rate" + "(PKR)" and the numeric value at 14pt; all centered cells are truly
     // centered between their borders so text can never cross into the next cell.
-    const x0=72,x1=105,x2=256,x3=295,x4=357,x5=425,x6=526;
+    const x0=72,x1=105,x2=240,x3=295,x4=355,x5=445,x6=526;
     let cursor=bodyTop;
     const drawHeader=(top)=>{
       drawScaledRect(x0,top,x6-x0,31);
       [x1,x2,x3,x4,x5].forEach(x=>drawScaledLine(x,top,x,top+31));
       drawScaledLine(x0,top+31,x6,top+31);
       drawCentered(timesBI,"Sr #",x0,x1,top+6,14);
-      drawScaledText(timesBI,"Description",109,top+6,14,{maxWidth:142});
+      drawScaledText(timesBI,"Description",109,top+6,14,{maxWidth:126});
       drawCentered(timesBI,"UOM",x2,x3,top+6,14);
       drawCentered(timesBI,"Qty.",x3,x4,top+6,14);
       drawCentered(timesBI,"Rate",x4,x5,top+3,14);
@@ -2354,7 +2361,7 @@ async function generatePDF(openPdf=false, printOnly=false, persist=true){
       const desc=clean(tr.querySelector(".desc").value),uom=clean(tr.querySelector(".uom").value);
       const qty=clean(tr.querySelector(".qty").value),rate=clean(tr.querySelector(".rate").value);
       const amount=num(qty)*num(rate); total+=amount;
-      const lines=wrapAt(desc,times,14*scale,145);
+      const lines=wrapAt(desc,times,14*scale,126);
       const rh=Math.max(27,lines.length*18+9);
       [x0,x1,x2,x3,x4,x5,x6].forEach(x=>drawScaledLine(x,cursor,x,cursor+rh));
       drawScaledLine(x0,cursor+rh,x6,cursor+rh);
@@ -3131,17 +3138,19 @@ async function finalizeAcceptedOwnershipTransfer(data){
   const nextAdmins=[email,...new Set(oldAdmins.filter(e=>e!==oldOwner && e!==email))].slice(0,4);
   const nextAuthorized=[email,...new Set(oldAuth.filter(e=>e!==oldOwner && e!==email))];
   const now=new Date().toISOString();
-  // The request is marked accepted first. Firestore rules then allow only the
-  // exact target Gmail to finalize the authorization document. This avoids a
-  // fragile getAfter() dependency and also makes a failed final write retryable.
+  // Finalize the transfer atomically. The previous version first changed the
+  // request to "accepted" and then performed a second write to authorization.
+  // If the second write was rejected/failed, the request became stuck. One
+  // Firestore batch now changes both documents together.
   const reqSnap=await getDoc(reqRef);
   if(!reqSnap.exists())throw new Error("Ownership request was not found.");
   const reqData=reqSnap.data()||{};
   if(normalizeEmail(reqData.toOwnerEmail)!==email || normalizeEmail(reqData.fromOwnerEmail)!==oldOwner)throw new Error("Ownership request details do not match the current Owner.");
-  if(reqData.status!=="accepted"){
-    await updateDoc(reqRef,{status:"accepted",acceptedAt:now,updatedAt:now});
-  }
-  await updateDoc(authRef,{ownerEmail:email,ownerUid:cloudUser.uid,adminEmails:nextAdmins,authorizedEmails:nextAuthorized,updatedAt:now,previousOwnerEmail:oldOwner,previousOwnerUid:String(data.fromOwnerUid||oldCfg.ownerUid||"")});
+  if(!["pending","accepted"].includes(reqData.status))throw new Error("This ownership request is no longer active.");
+  const batch=writeBatch(cloudDb);
+  batch.update(reqRef,{status:"accepted",acceptedAt:reqData.acceptedAt||now,updatedAt:now});
+  batch.update(authRef,{ownerEmail:email,ownerUid:cloudUser.uid,adminEmails:nextAdmins,authorizedEmails:nextAuthorized,updatedAt:now,previousOwnerEmail:oldOwner,previousOwnerUid:String(data.fromOwnerUid||oldCfg.ownerUid||"")});
+  await batch.commit();
   authorizationConfig={ownerEmail:email,ownerUid:cloudUser.uid,enabled:oldCfg.enabled===true,authorizedEmails:nextAuthorized,adminEmails:nextAdmins,updatedAt:now};
   localStorage.setItem("izhar_pavers_authorization_config_v1",JSON.stringify(authorizationConfig));
   mirrorAuthorizationLocalStorage();
