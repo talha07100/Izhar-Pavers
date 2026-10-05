@@ -95,7 +95,7 @@ service cloud.firestore {
         && getAfter(/databases/$(database)/documents/ownershipTransfers/$(request.auth.token.email)).data.status == 'accepted'
         && getAfter(/databases/$(database)/documents/ownershipTransfers/$(request.auth.token.email)).data.toOwnerEmail == request.auth.token.email
         && getAfter(/databases/$(database)/documents/ownershipTransfers/$(request.auth.token.email)).data.fromOwnerEmail == resource.data.ownerEmail
-        && getAfter(/databases/$(database)/documents/ownershipTransfers/$(request.auth.token.email)).data.fromOwnerUid == resource.data.ownerUid;
+        && getAfter(/databases/$(database)/documents/ownershipTransfers/$(request.auth.token.email)).data.fromOwnerUid != null;
 
       // Never delete the authorization document from the client.
       allow delete: if false;
@@ -103,8 +103,11 @@ service cloud.firestore {
 
     match /ownershipTransfers/{targetEmail} {
 
-      // Only the current verified Owner can create a request.
-      // The typed target email is only a destination; it does NOT grant access.
+      // The current verified Owner creates a request.
+      // The same Owner may also safely refresh/replace an existing pending
+      // request for the same target Gmail. This prevents a second request
+      // from failing with "Missing or insufficient permissions" when the
+      // target document already exists.
       allow create: if currentOwner()
         && targetEmail == request.resource.data.toOwnerEmail
         && request.resource.data.status == 'pending'
@@ -112,6 +115,17 @@ service cloud.firestore {
         && request.resource.data.fromOwnerEmail == request.auth.token.email
         && request.resource.data.toOwnerEmail != request.auth.token.email
         && request.resource.data.toOwnerEmail.matches('^[A-Za-z0-9._%+-]+@gmail\\.com$');
+
+      // Existing pending request may be refreshed only by the same current
+      // Owner. It cannot be changed into accepted/rejected by the Owner.
+      allow update: if currentOwner()
+        && resource.data.status == 'pending'
+        && targetEmail == resource.data.toOwnerEmail
+        && request.resource.data.status == 'pending'
+        && request.resource.data.fromOwnerUid == request.auth.uid
+        && request.resource.data.fromOwnerEmail == request.auth.token.email
+        && request.resource.data.toOwnerEmail == resource.data.toOwnerEmail
+        && request.resource.data.toOwnerEmail == targetEmail;
 
       // Only the target Gmail or the requesting Owner can see the request.
       allow read: if verifiedEmail()
