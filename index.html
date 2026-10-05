@@ -1778,6 +1778,10 @@ let currentEditingDocumentId=null;
 let activeDocumentProfileSnapshot=null;
 
 function saveCurrentDocument(silent=false){
+  // SECURITY: Documents must not be saved/updated without an authenticated
+  // Google account. LocalStorage is only the browser cache for an authenticated
+  // user's documents; it is not an anonymous quotation store.
+  if(typeof window.requireCloudLogin==="function" && !window.requireCloudLogin()) return false;
   // Local storage is the primary document store. Firebase is only a backup/sync layer;
   // a temporary Google/Firebase problem must NEVER prevent a file from being saved.
   // Saving/updating is also blocked until the required quotation details are complete.
@@ -2018,6 +2022,7 @@ function deleteSavedDocument(id){
   renderSavedDocuments();
 }
 function restoreSavedDocument(id){
+  if(typeof window.requireCloudLogin==="function" && !window.requireCloudLogin()) return;
   const trash=getRecycleBinDocuments();
   const doc=trash.find(x=>String(x.id)===String(id));
   if(!doc)return;
@@ -2055,6 +2060,7 @@ function permanentlyDeleteSelectedDocuments(){
 }
 
 function duplicateSavedDocument(id){
+  if(typeof window.requireCloudLogin==="function" && !window.requireCloudLogin()) return;
   const source=getSavedDocuments().find(x=>String(x.id)===String(id));
   if(!source)return;
   const subject=source.subject==='INVOICE'?'INVOICE':'QUOTATION';
@@ -2220,7 +2226,10 @@ async function generatePDF(openPdf=false, printOnly=false, persist=true){
   // Only the explicit Save / Update action (or normal new-document PDF generation)
   // may create/update storage metadata such as savedAt/createdAt.
   if(!clean(document.getElementById("ref").value) && persist) document.getElementById("ref").value=nextReference(subject);
-  if(persist) saveCurrentDocument(true);
+  if(persist){
+    const saved=saveCurrentDocument(true);
+    if(!saved) return false;
+  }
   // Open a blank tab immediately when requested so mobile browsers allow the PDF viewer tab.
   const pdfWindow=(openPdf || printOnly) ? window.open("about:blank","_blank") : null;
   if(openPdf && !pdfWindow){
@@ -2229,7 +2238,10 @@ async function generatePDF(openPdf=false, printOnly=false, persist=true){
   }
   const status=document.getElementById("status"); status.textContent="Generating PDF…";
   try{
-    if(persist) saveCurrentDocument(true);
+    if(persist){
+      const saved=saveCurrentDocument(true);
+      if(!saved) return false;
+    }
     const bytes=Uint8Array.from(atob(TEMPLATE_B64),c=>c.charCodeAt(0));
     const pdf=await PDFDocument.load(bytes);
     const page=pdf.getPages()[0];
@@ -2268,9 +2280,9 @@ async function generatePDF(openPdf=false, printOnly=false, persist=true){
       h+=31*scale;
       rows.forEach(tr=>{
         const desc=clean(tr.querySelector(".desc").value);
-        const fsize=9.2*scale;
+        const fsize=10.2*scale;
         const lines=wrapAt(desc,times,fsize,145);
-        const rh=Math.max(22,lines.length*10.5+6)*scale;
+        const rh=Math.max(22,lines.length*11.6+6)*scale;
         h+=rh;
       });
       h+=22*scale; // total row
@@ -2281,7 +2293,7 @@ async function generatePDF(openPdf=false, printOnly=false, persist=true){
       if(termData.length){
         h+=26*scale;
         termData.forEach(item=>{
-          const fs=Math.max(7.5,Number(item.fontSize||termBase))*scale;
+          const fs=Math.max(8.2,Number(item.fontSize||termBase))*scale;
           const lines=wrapAt(item.text,termFont(item),fs,410);
           h+=Math.max(12,lines.length*fs*1.25+4)*scale;
         });
@@ -2307,19 +2319,19 @@ async function generatePDF(openPdf=false, printOnly=false, persist=true){
     function drawScaledRect(x,top,w,h){rect(page,x,T(top),w,h*scale,Math.max(.35,.6*scale));}
 
     // Fixed header remains untouched; body fields start below it.
-    drawText(page,times,"Ref: "+clean(document.getElementById("ref").value),72,176,11);
+    drawText(page,times,"Ref: "+clean(document.getElementById("ref").value),72,176,12);
     const customRef=clean(document.getElementById("customRef")?.value||"");
-    if(customRef) drawText(page,times,"Custom Ref: "+customRef,72,191,10);
-    drawText(page,times,formatDateForPdf(document.getElementById("date").value),430,176,11);
+    if(customRef) drawText(page,times,"Custom Ref: "+customRef,72,191,11);
+    drawText(page,times,formatDateForPdf(document.getElementById("date").value),430,176,12);
     const customerText="M/s "+clean(document.getElementById("customer").value);
     drawText(page,timesBI,customerText,72,215,18);
     const customerWidth=Math.max(20,timesBI.widthOfTextAtSize(customerText,18));
     line(page,72,241,72+Math.min(customerWidth,300),241,1.2);
-    drawText(page,times,"Site: "+clean(document.getElementById("site").value),72,252,11);
-    drawText(page,timesB,"Subject:",72,271,14);
+    drawText(page,times,"Site: "+clean(document.getElementById("site").value),72,252,12);
+    drawText(page,timesB,"Subject:",72,271,15);
     const subjectText=clean(document.getElementById("subject").value)||"QUOTATION";
-    drawText(page,timesBI,subjectText,145,271,14);
-    line(page,145,290,145+timesBI.widthOfTextAtSize(subjectText,14),290,1);
+    drawText(page,timesBI,subjectText,145,271,15);
+    line(page,145,290,145+timesBI.widthOfTextAtSize(subjectText,15),290,1);
 
     const x0=72,x1=105,x2=256,x3=295,x4=357,x5=425,x6=526;
     let cursor=bodyTop;
@@ -2327,13 +2339,13 @@ async function generatePDF(openPdf=false, printOnly=false, persist=true){
       drawScaledRect(x0,top,x6-x0,31);
       [x1,x2,x3,x4,x5].forEach(x=>drawScaledLine(x,top,x,top+31));
       drawScaledLine(x0,top+31,x6,top+31);
-      drawScaledText(timesBI,"Sr #",77,top+6,10);
-      drawScaledText(timesBI,"Description",109,top+6,10);
-      drawScaledText(timesBI,"UOM",262,top+6,10);
-      drawScaledText(timesBI,"Qty.",306,top+6,10);
-      drawScaledText(timesBI,"Rate",379,top+6,10);
-      drawScaledText(timesBI,"(PKR)",382,top+18,10);
-      drawScaledText(timesBI,"Amount (PKR)",432,top+11,10);
+      drawScaledText(timesBI,"Sr #",77,top+6,10.5);
+      drawScaledText(timesBI,"Description",109,top+6,10.5);
+      drawScaledText(timesBI,"UOM",262,top+6,10.5);
+      drawScaledText(timesBI,"Qty.",306,top+6,10.5);
+      drawScaledText(timesBI,"Rate",379,top+6,10.5);
+      drawScaledText(timesBI,"(PKR)",382,top+18,10.5);
+      drawScaledText(timesBI,"Amount (PKR)",432,top+11,10.5);
     };
     drawHeader(cursor); cursor+=31;
     let total=0;
@@ -2341,17 +2353,17 @@ async function generatePDF(openPdf=false, printOnly=false, persist=true){
       const desc=clean(tr.querySelector(".desc").value),uom=clean(tr.querySelector(".uom").value);
       const qty=clean(tr.querySelector(".qty").value),rate=clean(tr.querySelector(".rate").value);
       const amount=num(qty)*num(rate); total+=amount;
-      const lines=wrapAt(desc,times,9.2*scale,145);
-      const rh=Math.max(22,lines.length*10.5+6);
+      const lines=wrapAt(desc,times,10.2*scale,145);
+      const rh=Math.max(22,lines.length*11.6+6);
       // Full row borders, including the outer left/right edges.
       [x0,x1,x2,x3,x4,x5,x6].forEach(x=>drawScaledLine(x,cursor,x,cursor+rh));
       drawScaledLine(x0,cursor+rh,x6,cursor+rh);
-      drawScaledText(times,String(i+1).padStart(2,"0")+"-",77,cursor+6,9.2);
-      lines.forEach((ln,j)=>drawScaledText(times,ln,109,cursor+5+j*10.5,9.2,{maxWidth:145}));
-      drawScaledText(times,uom,262,cursor+6,9.2,{maxWidth:35});
-      drawScaledText(times,qty,304,cursor+6,9.2,{maxWidth:55});
-      drawScaledText(times,rate?String(num(rate)).replace(/\.0+$/,'')+"/no":"",378,cursor+6,9.2,{maxWidth:65});
-      drawScaledText(times,amount?fmt(amount):"",464,cursor+6,9.2,{maxWidth:58});
+      drawScaledText(times,String(i+1).padStart(2,"0")+"-",77,cursor+6,10.2);
+      lines.forEach((ln,j)=>drawScaledText(times,ln,109,cursor+5+j*11.6,10.2,{maxWidth:145}));
+      drawScaledText(times,uom,262,cursor+6,10.2,{maxWidth:35});
+      drawScaledText(times,qty,304,cursor+6,10.2,{maxWidth:55});
+      drawScaledText(times,rate?String(num(rate)).replace(/\.0+$/,'')+"/no":"",378,cursor+6,10.2,{maxWidth:65});
+      drawScaledText(times,amount?fmt(amount):"",464,cursor+6,10.2,{maxWidth:58});
       cursor+=rh;
     });
     // Total row: full cell border + separator before the amount cell.
@@ -2360,8 +2372,8 @@ async function generatePDF(openPdf=false, printOnly=false, persist=true){
     drawScaledLine(x0,cursor,x0,cursor+22);
     drawScaledLine(x5,cursor,x5,cursor+22);
     drawScaledLine(x6,cursor,x6,cursor+22);
-    drawScaledText(timesBI,"Total Amount (PKR)",198,cursor+5,10);
-    drawScaledText(timesBI,fmt(total),464,cursor+5,10);
+    drawScaledText(timesBI,"Total Amount (PKR)",198,cursor+5,11);
+    drawScaledText(timesBI,fmt(total),464,cursor+5,11);
     cursor+=22;
 
     if(paymentEnabled){
@@ -2390,7 +2402,7 @@ async function generatePDF(openPdf=false, printOnly=false, persist=true){
       drawScaledText(timesB,"TERMS & CONDITIONS",72,cursor+2,15);
       cursor+=26;
       termData.forEach((item)=>{
-        const fs=Math.max(7.5,Number(item.fontSize||termBase));
+        const fs=Math.max(8.2,Number(item.fontSize||termBase));
         const font=termFont(item);
         const lines=wrapAt(item.text,font,fs*scale,410);
         const lh=fs*1.25;
