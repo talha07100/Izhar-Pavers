@@ -7,14 +7,8 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    function verifiedEmail() {
-      return signedIn()
-        && request.auth.token.email != null
-        && request.auth.token.email_verified == true;
-    }
-
     function bootstrapOwner() {
-      return verifiedEmail()
+      return signedIn()
         && request.auth.token.email == 'talhakhan14746@gmail.com';
     }
 
@@ -22,17 +16,14 @@ service cloud.firestore {
       return get(/databases/$(database)/documents/appConfig/authorization);
     }
 
-    // The current Owner is identified by the verified Google email.
-    // ownerUid is retained as additional data, but a stale UID cannot
-    // lock the legitimate Owner out of the transfer-request operation.
     function currentOwner() {
-      return verifiedEmail()
+      return signedIn()
         && exists(/databases/$(database)/documents/appConfig/authorization)
         && request.auth.token.email == authDoc().data.ownerEmail;
     }
 
     function currentAdmin() {
-      return verifiedEmail()
+      return signedIn()
         && exists(/databases/$(database)/documents/appConfig/authorization)
         && 'adminEmails' in authDoc().data
         && request.auth.token.email in authDoc().data.adminEmails;
@@ -40,94 +31,53 @@ service cloud.firestore {
 
     function validAdminList(data) {
       return 'ownerEmail' in data
-        && 'ownerUid' in data
-        && data.ownerUid != null
-        && data.ownerUid != ''
         && 'adminEmails' in data
         && data.adminEmails.size() >= 1
         && data.adminEmails.size() <= 4
-        && data.adminEmails.hasAll([data.ownerEmail])
-        && 'authorizedEmails' in data
-        && data.authorizedEmails.hasAll([data.ownerEmail]);
+        && data.adminEmails.hasAll([data.ownerEmail]);
     }
 
     match /appConfig/authorization {
+      allow read: if signedIn();
 
-      allow read: if verifiedEmail();
-
-      // First-time bootstrap.
+      // First-time creation / recovery by the permanent bootstrap Owner.
       allow create: if bootstrapOwner()
-        && request.resource.data.ownerEmail == request.auth.token.email
-        && request.resource.data.ownerUid == request.auth.uid
+        && request.resource.data.ownerEmail == 'talhakhan14746@gmail.com'
         && validAdminList(request.resource.data);
 
-      // Bootstrap owner can repair a missing/stale UID.
+      // The bootstrap Owner can also repair/migrate an old authorization
+      // document that does not yet contain the new adminEmails structure.
+      // Ownership transfer is still handled separately below.
       allow update: if bootstrapOwner()
-        && resource.data.ownerEmail == request.auth.token.email
-        && request.resource.data.ownerEmail == request.auth.token.email
-        && request.resource.data.ownerUid == request.auth.uid
+        && request.resource.data.ownerEmail == 'talhakhan14746@gmail.com'
         && validAdminList(request.resource.data);
 
-      // Normal admin changes. Ownership cannot be changed here.
+      // Existing Owner/Admin accounts may update authorization/admin data.
+      // The Owner is the only account allowed to change the ownerEmail.
       allow update: if currentAdmin()
         && validAdminList(request.resource.data)
-        && request.resource.data.ownerEmail == resource.data.ownerEmail
-        && request.resource.data.ownerUid == resource.data.ownerUid;
-
-      // Ownership ACCEPTANCE. The target account must be the verified
-      // Gmail in the pending request. Both documents are changed in the
-      // same atomic batch, so getAfter() sees the accepted request.
-      allow update: if verifiedEmail()
-        && request.auth.token.email == request.resource.data.ownerEmail
-        && request.resource.data.ownerUid == request.auth.uid
-        && request.resource.data.ownerEmail != resource.data.ownerEmail
-        && request.resource.data.adminEmails.hasAll([request.auth.token.email])
-        && request.resource.data.authorizedEmails.hasAll([request.auth.token.email])
-        && !request.resource.data.adminEmails.hasAny([resource.data.ownerEmail])
-        && !request.resource.data.authorizedEmails.hasAny([resource.data.ownerEmail])
-        && validAdminList(request.resource.data)
-        && exists(/databases/$(database)/documents/ownershipTransfers/$(request.auth.token.email))
-        && getAfter(/databases/$(database)/documents/ownershipTransfers/$(request.auth.token.email)).data.status == 'accepted'
-        && getAfter(/databases/$(database)/documents/ownershipTransfers/$(request.auth.token.email)).data.toOwnerEmail == request.auth.token.email
-        && getAfter(/databases/$(database)/documents/ownershipTransfers/$(request.auth.token.email)).data.fromOwnerEmail == resource.data.ownerEmail;
-
-      allow delete: if false;
-    }
-
-    match /ownershipTransfers/{targetEmail} {
-
-      // Only the current verified Owner can create a request.
-      allow create: if currentOwner()
-        && targetEmail == request.resource.data.toOwnerEmail
-        && request.resource.data.status == 'pending'
-        && request.resource.data.fromOwnerUid == request.auth.uid
-        && request.resource.data.fromOwnerEmail == request.auth.token.email
-        && request.resource.data.toOwnerEmail != request.auth.token.email
-        && request.resource.data.toOwnerEmail.matches('^[A-Za-z0-9._%+-]+@gmail\\.com$');
-
-      // Target account or requesting Owner can read the request.
-      allow read: if verifiedEmail()
         && (
-          request.auth.token.email == targetEmail
-          || request.auth.uid == resource.data.fromOwnerUid
+          (
+            request.resource.data.ownerEmail == resource.data.ownerEmail
+            && (
+              currentOwner()
+              || request.resource.data.adminEmails == resource.data.adminEmails
+            )
+          )
+          ||
+          (
+            currentOwner()
+            && request.resource.data.ownerEmail != resource.data.ownerEmail
+            && request.resource.data.ownerEmail in request.resource.data.adminEmails
+            && request.resource.data.authorizedEmails.hasAll([request.resource.data.ownerEmail])
+          )
         );
-
-      // Only the target account can accept/reject its request.
-      allow update: if verifiedEmail()
-        && request.auth.token.email == targetEmail
-        && resource.data.toOwnerEmail == request.auth.token.email
-        && resource.data.status == 'pending'
-        && request.resource.data.fromOwnerEmail == resource.data.fromOwnerEmail
-        && request.resource.data.fromOwnerUid == resource.data.fromOwnerUid
-        && request.resource.data.toOwnerEmail == resource.data.toOwnerEmail
-        && request.resource.data.status in ['accepted', 'rejected'];
 
       allow delete: if false;
     }
 
     match /users/{userId}/{document=**} {
-      allow read, write: if signedIn()
-        && request.auth.uid == userId;
+      allow read, write: if signedIn() && request.auth.uid == userId;
     }
   }
 }
