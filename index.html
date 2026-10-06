@@ -512,12 +512,22 @@ body:has(.documents-portal.open) .saved-card{display:none}
 </div>
 <div class="auth-note" style="margin-top:8px">An Admin added here is automatically authorized to use the app.</div>
 <div class="auth-note" style="margin-top:18px;font-weight:800">Transfer Ownership</div>
-<div class="auth-note" style="margin-top:6px">Enter the Gmail account that should become the new Owner. The selected Gmail will automatically become an Admin and authorized user. The current Owner will remain authorized but will lose Owner/Admin control.</div>
+<div class="auth-note" style="margin-top:6px">Enter the Gmail account that should become the new Owner. An ownership request will be sent to that Gmail. Ownership changes only after that account signs in and accepts the request.</div>
 <div class="ownership-row" style="margin-top:8px;display:flex;flex-direction:column;gap:8px">
 <input id="newOwnerEmailInput" placeholder="Enter new Owner Gmail address" type="email"/>
 <button class="btn primary" id="transferOwnershipBtn" onclick="transferAdminOwnership()" type="button">Transfer Ownership</button>
 </div>
-<div class="auth-note" style="margin-top:8px">Only the current Owner can perform this action. A confirmation will appear before the transfer.</div>
+<div class="auth-note" style="margin-top:8px">Only the current Owner can create a transfer request. The new Owner must sign in with the exact Gmail account and accept the request before ownership changes. Once accepted, the previous Owner is automatically removed.</div>
+</div>
+<div id="ownershipTransferNotice" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.58);z-index:99999;align-items:center;justify-content:center;padding:18px">
+  <div style="width:min(520px,100%);background:#fff;border-radius:18px;padding:22px;box-shadow:0 20px 60px rgba(0,0,0,.3)">
+    <div style="font-size:22px;font-weight:900;margin-bottom:8px">🔔 Ownership Transfer Request</div>
+    <div id="ownershipTransferNoticeText" style="font-size:15px;line-height:1.55;color:#334155"></div>
+    <div style="display:flex;gap:10px;margin-top:18px;justify-content:flex-end">
+      <button class="btn secondary" id="rejectOwnershipTransferBtn" type="button">Reject</button>
+      <button class="btn primary" id="acceptOwnershipTransferBtn" type="button">Accept Ownership</button>
+    </div>
+  </div>
 </div>
 <div class="card" id="referenceSettingsCard">
 <h3 style="margin-top:0">Reference &amp; Serial Number Settings</h3>
@@ -2682,14 +2692,14 @@ renderSavedDocuments();
 </script>
 <script type="module">
 import { initializeApp, getApps } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-app.js";
-import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut, setPersistence, browserLocalPersistence } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js";
-import { getFirestore, doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js";
+import { getAuth, GoogleAuthProvider, signInWithPopup, reauthenticateWithPopup, onAuthStateChanged, signOut, setPersistence, browserLocalPersistence } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js";
+import { getFirestore, doc, getDoc, setDoc, updateDoc, onSnapshot, writeBatch } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js";
 
 const FIREBASE_CONFIG_KEY="izhar_pavers_firebase_config_v1";
 const CLOUD_SYNC_KEYS=["izhar_pavers_saved_documents_v1","izhar_pavers_recycle_bin_v1","izhar_pavers_materials_v1","izhar_pavers_profile_settings_v1","izhar_pavers_default_terms_v1","izhar_pavers_reference_settings_v1","izhar_pavers_terms_font_size_v1"];
 let cloudApp=null, cloudAuth=null, cloudDb=null, cloudUser=null, syncTimer=null, cloudReady=false, firebaseInitPromise=null, authProcessingUid=null;
 const BOOTSTRAP_OWNER_EMAIL="talhakhan14746@gmail.com";
-let authorizationConfig={ownerEmail:BOOTSTRAP_OWNER_EMAIL,enabled:false,authorizedEmails:[BOOTSTRAP_OWNER_EMAIL]};
+let authorizationConfig={ownerEmail:BOOTSTRAP_OWNER_EMAIL,ownerUid:"",enabled:false,authorizedEmails:[BOOTSTRAP_OWNER_EMAIL],adminEmails:[BOOTSTRAP_OWNER_EMAIL]};
 let authorizationChecked=false;
 
 const FIREBASE_DEFAULT_CONFIG={
@@ -2758,7 +2768,10 @@ function getAdminEmails(){
   return [...new Set([owner,...raw.map(normalizeEmail).filter(Boolean)])].slice(0,4);
 }
 function isOwnerAccount(user=cloudUser){
-  return !!user && normalizeEmail(user.email)===getCurrentOwnerEmail();
+  if(!user) return false;
+  const configuredUid=String(authorizationConfig.ownerUid||"").trim();
+  if(configuredUid) return user.uid===configuredUid;
+  return normalizeEmail(user.email)===getCurrentOwnerEmail();
 }
 function isAdminAccount(user=cloudUser){
   if(!user) return false;
@@ -2853,6 +2866,7 @@ async function saveAuthorizationConfig(){
   const updatedAt=new Date().toISOString();
   authorizationConfig={
     ownerEmail:currentOwner,
+    ownerUid:String(authorizationConfig.ownerUid||((cloudUser&&isOwnerAccount(cloudUser))?cloudUser.uid:"")),
     enabled:authorizationConfig.enabled===true,
     authorizedEmails:[...new Set([currentOwner,...(authorizationConfig.authorizedEmails||[]).map(normalizeEmail).filter(Boolean)])],
     adminEmails:[...new Set([currentOwner,...adminEmails])].slice(0,4),
@@ -2863,7 +2877,7 @@ async function saveAuthorizationConfig(){
   renderAuthorizationUI();
   if(!cloudDb) throw new Error("Cloud connection is not ready. The setting is saved locally and will sync when Firebase reconnects.");
   const ref=doc(cloudDb,"appConfig","authorization");
-  const payload={ownerEmail:authorizationConfig.ownerEmail,enabled:authorizationConfig.enabled,authorizedEmails:authorizationConfig.authorizedEmails,adminEmails:authorizationConfig.adminEmails,updatedAt};
+  const payload={ownerEmail:authorizationConfig.ownerEmail,ownerUid:authorizationConfig.ownerUid||null,enabled:authorizationConfig.enabled,authorizedEmails:authorizationConfig.authorizedEmails,adminEmails:authorizationConfig.adminEmails,updatedAt};
   await withTimeout(setDoc(ref,payload,{merge:true}),8000,"Authorization cloud save");
   return true;
 }
@@ -2880,6 +2894,7 @@ async function loadAuthorizationConfig(){
       localUpdatedAt=String(cached.updatedAt||"");
       authorizationConfig={
         ownerEmail:normalizeEmail(cached.ownerEmail)||BOOTSTRAP_OWNER_EMAIL,
+        ownerUid:String(cached.ownerUid||""),
         enabled:cached.enabled===true,
         authorizedEmails:Array.isArray(cached.authorizedEmails)?cached.authorizedEmails.map(normalizeEmail).filter(Boolean):[normalizeEmail(cached.ownerEmail)||BOOTSTRAP_OWNER_EMAIL],
         adminEmails:Array.isArray(cached.adminEmails)?cached.adminEmails.map(normalizeEmail).filter(Boolean):[],
@@ -2905,6 +2920,7 @@ async function loadAuthorizationConfig(){
         const adminEmails=Array.isArray(d.adminEmails)?d.adminEmails.map(normalizeEmail).filter(Boolean):[owner];
         authorizationConfig={
           ownerEmail:owner,
+          ownerUid:String(d.ownerUid||""),
           enabled:d.enabled===true,
           authorizedEmails:[...new Set([owner,...authEmails])],
           adminEmails:[...new Set([owner,...adminEmails])],
@@ -2918,12 +2934,13 @@ async function loadAuthorizationConfig(){
       const owner=BOOTSTRAP_OWNER_EMAIL;
       authorizationConfig={
         ownerEmail:owner,
+        ownerUid:String(cloudUser?.uid||authorizationConfig.ownerUid||""),
         enabled:authorizationConfig.enabled===true,
         authorizedEmails:[...new Set([owner,...(authorizationConfig.authorizedEmails||[]).map(normalizeEmail).filter(Boolean)])],
         adminEmails:[owner],
         updatedAt:localUpdatedAt||new Date().toISOString()
       };
-      await withTimeout(setDoc(doc(cloudDb,"appConfig","authorization"),{ownerEmail:owner,enabled:authorizationConfig.enabled,authorizedEmails:authorizationConfig.authorizedEmails,adminEmails:authorizationConfig.adminEmails,updatedAt:authorizationConfig.updatedAt},{merge:true}),8000,"Authorization cloud create");
+      await withTimeout(setDoc(doc(cloudDb,"appConfig","authorization"),{ownerEmail:owner,ownerUid:authorizationConfig.ownerUid||null,enabled:authorizationConfig.enabled,authorizedEmails:authorizationConfig.authorizedEmails,adminEmails:authorizationConfig.adminEmails,updatedAt:authorizationConfig.updatedAt},{merge:true}),8000,"Authorization cloud create");
       localStorage.setItem("izhar_pavers_authorization_config_v1",JSON.stringify(authorizationConfig));
     }
   }catch(e){
@@ -3024,33 +3041,164 @@ window.removeAdmin=async function(email){
 };
 
 window.transferAdminOwnership=async function(){
-  if(!isOwnerAccount()){ alert("Only the current Owner can transfer ownership."); return; }
+  if(!isOwnerAccount()){ alert("Only the current Owner can create an ownership transfer request."); return; }
   const input=document.getElementById("newOwnerEmailInput");
   const newOwner=normalizeEmail(input?.value);
   const oldOwner=getCurrentOwnerEmail();
   if(!newOwner){ alert("Please enter the new Owner Gmail address."); return; }
-  if(!/^[-a-z0-9._%+]+@gmail\.com$/i.test(newOwner)){ alert("Please enter a valid Gmail address (example@gmail.com)."); return; }
+  if(!/^[-a-z0-9._%+]+@gmail\.com$/i.test(newOwner)){ alert("Please enter a valid Gmail address."); return; }
   if(newOwner===oldOwner){ alert("This account is already the current Owner."); return; }
-  if(!cloudDb){ alert("Cloud connection is not ready. Please wait a moment and try again."); return; }
-  if(!confirm("Transfer ownership to "+newOwner+"?\n\nThis Gmail will become the new Owner and Admin. Your current account will remain authorized but will lose Owner/Admin control. This action cannot be undone by the old Owner.")) return;
-  const existingAdmins=getAdminEmails().filter(Boolean);
-  const nextAdmins=[...new Set([newOwner,...existingAdmins.filter(e=>e!==oldOwner && e!==newOwner)])].slice(0,4);
-  const nextAuthorized=[...new Set([...(authorizationConfig.authorizedEmails||[]).map(normalizeEmail).filter(Boolean),oldOwner,newOwner])];
-  const nextConfig={ownerEmail:newOwner,enabled:!!authorizationConfig.enabled,authorizedEmails:nextAuthorized,adminEmails:nextAdmins,updatedAt:new Date().toISOString(),previousOwnerEmail:oldOwner};
+  if(!cloudDb || !cloudAuth || !cloudUser){ alert("Secure Google connection is not ready. Please wait a moment and try again."); return; }
+
+  const ok=confirm("SEND OWNERSHIP REQUEST?\n\n"+newOwner+" will receive an ownership request after signing in with this exact Gmail account.\n\nOwnership will NOT change until that account presses ACCEPT OWNERSHIP.\n\nContinue?");
+  if(!ok)return;
+  const transferBtn=document.getElementById("transferOwnershipBtn");
+  if(transferBtn)transferBtn.disabled=true;
   try{
-    await withTimeout(setDoc(doc(cloudDb,"appConfig","authorization"),nextConfig,{merge:true}),20000,"Ownership transfer");
-    authorizationConfig=nextConfig;
-    localStorage.setItem("izhar_pavers_authorization_config_v1",JSON.stringify(nextConfig));
-    mirrorAuthorizationLocalStorage();
-    if(input) input.value="";
+    const now=new Date().toISOString();
+    const currentUid=cloudUser.uid;
+    const requestRef=doc(cloudDb,"ownershipTransfers",newOwner);
+    // Sending a request must NOT change ownership or authorization.
+    // The authorization document is changed only after the new Owner accepts.
+
+    // Simple request model: no secondary Firebase app, no second popup,
+    // and no target UID is required. The new Owner must sign in with the
+    // exact requested Gmail before the Accept button is shown.
+    await setDoc(requestRef,{
+      status:"pending",
+      fromOwnerEmail:oldOwner,
+      fromOwnerUid:currentUid,
+      toOwnerEmail:newOwner,
+      createdAt:now,
+      updatedAt:now
+    },{merge:false});
+
+    if(input)input.value="";
     renderAuthorizationUI();
-    alert("Ownership transferred successfully to "+newOwner+". You will now be signed out.");
-    await signOut(cloudAuth);
+    setCloudMessage("Ownership request sent to "+newOwner+". Waiting for acceptance.");
+    alert("Ownership request sent successfully.\n\nThe new Owner must sign in with "+newOwner+" and press ACCEPT OWNERSHIP.\n\nYou remain the Owner until they accept.");
   }catch(e){
-    console.error(e);
-    alert("Ownership transfer failed: "+(e?.message||e));
+    console.error("Ownership transfer request failed:",e);
+    setCloudMessage("Ownership request was NOT created.");
+    alert("Transfer request failed.\n\nNo ownership change was made.\n\nReason: "+(e?.message||e));
+  }finally{
+    if(transferBtn)transferBtn.disabled=!isOwnerAccount();
   }
 };
+
+let ownershipTransferUnsubscribe=null;
+let pendingOwnershipTransfer=null;
+function closeOwnershipTransferNotice(){
+  const el=document.getElementById("ownershipTransferNotice");
+  if(el) el.style.display="none";
+}
+function showOwnershipTransferNotice(data){
+  pendingOwnershipTransfer=data||null;
+  const el=document.getElementById("ownershipTransferNotice");
+  const textEl=document.getElementById("ownershipTransferNoticeText");
+  if(!el||!textEl||!data)return;
+  textEl.innerHTML="<strong>"+escapeHtml(data.fromOwnerEmail||"Current Owner")+"</strong> wants to transfer ownership of Izhar Pavers to <strong>"+escapeHtml(data.toOwnerEmail||normalizeEmail(cloudUser?.email))+"</strong>.<br><br>Nothing has changed yet. If you accept, your Google account will become the new Owner and the previous Owner will automatically lose Owner/Admin/authorized access.";
+  el.style.display="flex";
+}
+async function rejectOwnershipTransfer(){
+  const data=pendingOwnershipTransfer;
+  if(!data || !cloudDb || !cloudUser)return;
+  const email=normalizeEmail(cloudUser.email);
+  if(email!==normalizeEmail(data.toOwnerEmail))return;
+  try{
+    const reqRef=doc(cloudDb,"ownershipTransfers",email);
+    // Rejection only closes the pending request. It must not modify
+    // the authorization document because ownership never changed.
+    await updateDoc(reqRef,{status:"rejected",updatedAt:new Date().toISOString()});
+    pendingOwnershipTransfer=null;
+    closeOwnershipTransferNotice();
+    setCloudMessage("Ownership transfer request rejected.");
+  }catch(e){ alert("Could not reject the request: "+(e?.message||e)); }
+}
+window.acceptOwnershipTransfer=async function(){
+  const data=pendingOwnershipTransfer;
+  if(!data || !cloudDb || !cloudUser)return;
+  const email=normalizeEmail(cloudUser.email);
+  if(email!==normalizeEmail(data.toOwnerEmail)){
+    alert("This transfer request does not belong to the currently signed-in Gmail account.");
+    return;
+  }
+  if(!confirm("ACCEPT OWNERSHIP?\n\nYour Google account will become the Owner.\nThe previous Owner will automatically be removed from Owner/Admin/authorized access.\n\nContinue?"))return;
+  const acceptBtn=document.getElementById("acceptOwnershipTransferBtn");
+  const rejectBtn=document.getElementById("rejectOwnershipTransferBtn");
+  if(acceptBtn)acceptBtn.disabled=true;if(rejectBtn)rejectBtn.disabled=true;
+  try{
+    const authRef=doc(cloudDb,"appConfig","authorization");
+    const reqRef=doc(cloudDb,"ownershipTransfers",email);
+    const snap=await getDoc(authRef);
+    if(!snap.exists())throw new Error("Authorization settings were not found.");
+    const oldCfg=snap.data()||{};
+    if(normalizeEmail(oldCfg.ownerEmail)!==normalizeEmail(data.fromOwnerEmail)){
+      throw new Error("This transfer request is no longer valid because the current Owner has changed.");
+    }
+    // The transfer request was created by the authenticated current Owner.
+    // Do not block a legitimate transfer merely because an older ownerUid is stale.
+    if(oldCfg.ownerUid && String(oldCfg.ownerUid)!==String(data.fromOwnerUid)){
+      console.warn("Owner UID differs from the historical transfer request; proceeding because the current Owner email matches the request.");
+    }
+    const oldOwner=normalizeEmail(oldCfg.ownerEmail);
+    const oldAdmins=(Array.isArray(oldCfg.adminEmails)?oldCfg.adminEmails:[]).map(normalizeEmail).filter(Boolean);
+    const oldAuth=(Array.isArray(oldCfg.authorizedEmails)?oldCfg.authorizedEmails:[]).map(normalizeEmail).filter(Boolean);
+    const nextAdmins=[...new Set(oldAdmins.filter(e=>e!==oldOwner && e!==email))];
+    nextAdmins.unshift(email);
+    const nextAuthorized=[...new Set(oldAuth.filter(e=>e!==oldOwner && e!==email))];
+    nextAuthorized.unshift(email);
+    const now=new Date().toISOString();
+    const batch=writeBatch(cloudDb);
+    batch.update(authRef,{
+      ownerEmail:email,
+      ownerUid:cloudUser.uid,
+      adminEmails:nextAdmins.slice(0,4),
+      authorizedEmails:nextAuthorized,
+      updatedAt:now,
+      previousOwnerEmail:oldOwner,
+      previousOwnerUid:String(data.fromOwnerUid)
+    });
+    batch.update(reqRef,{status:"accepted",acceptedAt:now,updatedAt:now});
+    await batch.commit();
+    authorizationConfig={ownerEmail:email,ownerUid:cloudUser.uid,enabled:oldCfg.enabled===true,authorizedEmails:nextAuthorized,adminEmails:nextAdmins.slice(0,4),updatedAt:now};
+    localStorage.setItem("izhar_pavers_authorization_config_v1",JSON.stringify(authorizationConfig));
+    mirrorAuthorizationLocalStorage();
+    pendingOwnershipTransfer=null;
+    closeOwnershipTransferNotice();
+    renderAuthorizationUI();
+    setCloudMessage("You are now the Owner. The previous Owner has been automatically removed.");
+    alert("Ownership accepted successfully.\n\nYou are now the Owner.");
+  }catch(e){
+    console.error("Ownership acceptance failed:",e);
+    alert("Ownership could not be accepted.\n\nNo ownership change was completed.\n\nReason: "+(e?.message||e));
+  }finally{
+    if(acceptBtn)acceptBtn.disabled=false;if(rejectBtn)rejectBtn.disabled=false;
+  }
+};
+window.rejectOwnershipTransfer=rejectOwnershipTransfer;
+function watchOwnershipTransferForUser(user){
+  if(ownershipTransferUnsubscribe){ try{ownershipTransferUnsubscribe();}catch(e){} ownershipTransferUnsubscribe=null; }
+  pendingOwnershipTransfer=null;
+  closeOwnershipTransferNotice();
+  if(!user || !cloudDb)return;
+  const email=normalizeEmail(user.email);
+  if(!email)return;
+  const ref=doc(cloudDb,"ownershipTransfers",email);
+  ownershipTransferUnsubscribe=onSnapshot(ref,(snap)=>{
+    if(!snap.exists()){pendingOwnershipTransfer=null;closeOwnershipTransferNotice();return;}
+    const d=snap.data()||{};
+    if(d.status==="pending" && normalizeEmail(d.toOwnerEmail)===email){showOwnershipTransferNotice(d);}
+    else{pendingOwnershipTransfer=null;closeOwnershipTransferNotice();}
+  },(e)=>console.warn("Ownership transfer notification listener:",e));
+}
+
+
+// Wire the in-app ownership notification actions.
+document.addEventListener("click",(event)=>{
+  if(event.target && event.target.id==="acceptOwnershipTransferBtn") window.acceptOwnershipTransfer();
+  if(event.target && event.target.id==="rejectOwnershipTransferBtn") window.rejectOwnershipTransfer();
+});
 
 window.refreshAuthorizationSettings=async function(){
   if(!isAdminAccount()){ setCloudMessage("Only an Admin can manage authorization."); return; }
@@ -3079,6 +3227,7 @@ async function initFirebase(){
       await setPersistence(cloudAuth,browserLocalPersistence);
       onAuthStateChanged(cloudAuth, async user=>{
         cloudUser=user||null; cloudReady=false; authorizationChecked=false; updateCloudUI(); renderAuthorizationUI();
+        watchOwnershipTransferForUser(user);
         if(!user) return;
         if(authProcessingUid===user.uid) return;
         authProcessingUid=user.uid;
